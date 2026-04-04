@@ -6,7 +6,7 @@ import requests
 from typing import Any
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Query, Header
+from fastapi import FastAPI, HTTPException, Query, Header, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from cbpr_service import analyze_cbpr
@@ -54,18 +54,21 @@ app = FastAPI(title="CBPR Quant Backend", version="1.0.0")
 
 ENV = os.getenv("ENV", "dev").strip().lower() or "dev"
 
-frontend_origins_raw = os.getenv("FRONTEND_ORIGIN", "http://localhost:5173")
-frontend_origins = [
-    origin.strip()
-    for origin in frontend_origins_raw.split(",")
-    if origin.strip()
-]
+frontend_origins_raw = os.getenv(
+    "FRONTEND_ORIGIN",
+    "http://localhost:5173,https://quant.cbprcapital.com",
+)
+frontend_origins = []
+for origin in frontend_origins_raw.split(","):
+    cleaned = origin.strip().rstrip("/")
+    if cleaned and cleaned not in frontend_origins:
+        frontend_origins.append(cleaned)
 
-if "http://localhost:5173" not in frontend_origins:
+if "https://quant.cbprcapital.com" not in frontend_origins:
+    frontend_origins.append("https://quant.cbprcapital.com")
+
+if ENV != "production" and "http://localhost:5173" not in frontend_origins:
     frontend_origins.append("http://localhost:5173")
-
-if ENV == "production":
-    frontend_origins = [origin for origin in frontend_origins if origin != "http://localhost:5173"]
 
 print(f"[BOOT] ENV={ENV}")
 print(f"[BOOT] Allowed CORS origins={frontend_origins}")
@@ -74,9 +77,30 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=frontend_origins,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def force_preflight_ok(request: Request, call_next):
+    if request.method == "OPTIONS":
+        origin = (request.headers.get("origin") or "").strip().rstrip("/")
+        response = Response(status_code=200)
+
+        if origin in frontend_origins:
+            response.headers["Access-Control-Allow-Origin"] = origin
+            response.headers["Access-Control-Allow-Credentials"] = "true"
+            response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+            response.headers["Access-Control-Allow-Headers"] = request.headers.get(
+                "access-control-request-headers",
+                "Authorization, Content-Type",
+            )
+            response.headers["Vary"] = "Origin"
+
+        return response
+
+    return await call_next(request)
 
 
 def normalize_search_item(item: dict[str, Any]) -> dict[str, Any]:
