@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.venv/
+backend/.venv/
+__pycache__/
+backend/__pycache__/
+.env
+.env.production
+backend/.env
+backend/.env.production
+.DS_Store
+src/.DS_Store
+src/app/.DS_Store
+src/app/components/.DS_Store

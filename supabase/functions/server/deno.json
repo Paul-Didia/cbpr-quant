@@ -1,0 +1,6 @@
+{
+  "compilerOptions": {
+    "lib": ["deno.ns", "dom", "es2022"],
+    "strict": true
+  }
+}
