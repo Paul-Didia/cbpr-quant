@@ -242,10 +242,11 @@ def get_user_email_from_token(authorization: str | None) -> str | None:
     token = extract_bearer_token(authorization)
 
     if not token:
+        print("[AUTH] No bearer token received")
         return None
 
     if not SUPABASE_URL or not SUPABASE_ANON_KEY:
-        print("Supabase auth configuration missing, skipping token verification")
+        print("[AUTH] Supabase auth configuration missing, skipping token verification")
         return None
 
     try:
@@ -258,40 +259,57 @@ def get_user_email_from_token(authorization: str | None) -> str | None:
             timeout=10,
         )
     except Exception as e:
-        print(f"Auth verification failed: {e}")
+        print(f"[AUTH] Verification failed: {e}")
         return None
 
     if response.status_code != 200:
-        print(f"Invalid or expired session: {response.status_code}")
+        print(f"[AUTH] Invalid or expired session: {response.status_code}")
         return None
 
     user_data = response.json()
     email = str(user_data.get("email", "") or "").strip().lower()
+
+    if email:
+        print(f"[AUTH] Authenticated user: {email}")
+    else:
+        print("[AUTH] Token verified but no email found")
+
     return email or None
 
 
-def enforce_symbol_access(symbol: str, quote_data: dict[str, Any], authorization: str | None) -> str:
+def enforce_symbol_access(
+    symbol: str,
+    quote_data: dict[str, Any],
+    authorization: str | None,
+    x_user_email: str | None = None,
+) -> str:
     env = ENV
-    
-    email = get_user_email_from_token(authorization)
+
+    fallback_email = str(x_user_email or "").strip().lower() or None
+    token_email = get_user_email_from_token(authorization)
+    email = token_email or fallback_email
 
     if email:
         plan = get_stripe_plan_by_email(email)
-
+        print(f"[ACCESS] email={email} plan={plan} symbol={symbol}")
     elif env == "dev":
         plan = DEV_DEFAULT_PLAN
-        print(f"[DEV MODE] Using DEV_DEFAULT_PLAN={plan}")
-
+        print(f"[DEV MODE] Using DEV_DEFAULT_PLAN={plan} for symbol={symbol}")
     else:
         plan = "free"
+        print(f"[ACCESS] No authenticated email found, falling back to free for symbol={symbol}")
 
     if not is_symbol_allowed_for_plan(symbol, quote_data, plan):
         required_plan = get_required_plan_for_symbol(symbol, quote_data)
+        print(
+            f"[ACCESS] Denied symbol={symbol} plan={plan} required_plan={required_plan}"
+        )
         raise HTTPException(
             status_code=403,
             detail=f"This asset requires the {required_plan} plan",
         )
 
+    print(f"[ACCESS] Granted symbol={symbol} plan={plan}")
     return plan
 
 
@@ -413,10 +431,14 @@ def timeseries(
 
 
 @app.get("/asset/{symbol:path}")
-def asset(symbol: str, authorization: str | None = Header(default=None)) -> dict[str, Any]:
+def asset(
+    symbol: str,
+    authorization: str | None = Header(default=None),
+    x_user_email: str | None = Header(default=None, alias="X-User-Email"),
+) -> dict[str, Any]:
     try:
         quote_data = get_quote(symbol)
-        plan = enforce_symbol_access(symbol, quote_data, authorization)
+        plan = enforce_symbol_access(symbol, quote_data, authorization, x_user_email)
 
         return {
             "quote": normalize_quote_item(quote_data),
@@ -437,10 +459,11 @@ def analysis(
     interval: str = Query(default="4h"),
     outputsize: int = Query(default=300),
     authorization: str | None = Header(default=None),
+    x_user_email: str | None = Header(default=None, alias="X-User-Email"),
 ) -> dict[str, Any]:
     try:
         quote_data = get_quote(symbol)
-        plan = enforce_symbol_access(symbol, quote_data, authorization)
+        plan = enforce_symbol_access(symbol, quote_data, authorization, x_user_email)
         ts_data = get_time_series(symbol, interval=interval, outputsize=outputsize)
 
         analysis_data = analyze_cbpr(

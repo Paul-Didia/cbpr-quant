@@ -1,6 +1,5 @@
 import { Link, Outlet, useLocation } from 'react-router';
 import { Home, Library, User } from 'lucide-react';
-import { BrandWaves } from './BrandWaves';
 import { motion } from 'motion/react';
 
 export function Layout() {
@@ -11,15 +10,15 @@ export function Layout() {
   };
   
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
+    <div className="min-h-screen bg-gray-50 flex flex-col pb-24">
       {/* Main Content */}
-      <main className="flex-1 pt-4">
+      <main className="flex-1 pt-4 pb-6">
         <Outlet />
       </main>
       
       {/* Bottom Navigation */}
       <motion.nav 
-        className="bg-white/80 backdrop-blur-xl border-t border-gray-200/50 sticky bottom-0 pb-safe"
+        className="fixed bottom-0 left-0 right-0 z-[100000] bg-white/90 backdrop-blur-xl border-t border-gray-200/50 pb-safe"
         initial={{ y: 100 }}
         animate={{ y: 0 }}
         transition={{ duration: 0.6, ease: [0.25, 0.46, 0.45, 0.94] }}

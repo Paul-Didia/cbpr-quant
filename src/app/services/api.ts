@@ -6,14 +6,25 @@ const IS_DEV = import.meta.env.DEV;
 
 export class ApiService {
   private token: string | null = null;
+  private userEmail: string | null = null;
 
   setToken(token: string | null) {
     this.token = token;
   }
 
-  private async request(baseUrl: string, endpoint: string, options: RequestInit = {}) {
+  setUserEmail(email: string | null) {
+    this.userEmail = email;
+  }
+
+  private async request(
+    baseUrl: string,
+    endpoint: string,
+    options: RequestInit = {},
+    extraHeaders: Record<string, string> = {}
+  ) {
     const headers: HeadersInit = {
       'Content-Type': 'application/json',
+      ...extraHeaders,
       ...options.headers,
     };
 
@@ -24,7 +35,11 @@ export class ApiService {
     const url = `${baseUrl}${endpoint}`;
 
     if (IS_DEV) {
-      console.log('API Request →', url);
+      console.log('API Request →', url, {
+        hasToken: !!this.token,
+        userEmail: this.userEmail,
+        extraHeaders,
+      });
     }
 
     const response = await fetch(url, {
@@ -46,7 +61,13 @@ export class ApiService {
   }
 
   private async requestPython(endpoint: string, options: RequestInit = {}) {
-    return this.request(PYTHON_API_BASE, endpoint, options);
+    const extraHeaders: Record<string, string> = {};
+
+    if (this.userEmail) {
+      extraHeaders['X-User-Email'] = this.userEmail;
+    }
+
+    return this.request(PYTHON_API_BASE, endpoint, options, extraHeaders);
   }
 
   // ===== FAVORITES (SUPABASE) =====
@@ -79,7 +100,7 @@ export class ApiService {
     return data.profile;
   }
 
-  // ===== SUBSCRIPTION (SUPABASE) =====
+  // ===== SUBSCRIPTION (PYTHON) =====
   async getSubscription(email: string): Promise<'free' | 'pro' | 'quant'> {
     const data = await this.requestPython(
       `/subscription?email=${encodeURIComponent(email)}`
@@ -138,7 +159,6 @@ export class ApiService {
     );
   }
 
-  // Temporairement laissé côté front tant que l'endpoint Python n'existe pas
   async analyzeFavorites(interval: string = '4h', outputsize: number = 300) {
     const favorites = await this.getFavorites();
 
