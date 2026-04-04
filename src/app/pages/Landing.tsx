@@ -1,6 +1,5 @@
 import { Link } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { BrandWaves } from '../components/BrandWaves';
 import { AppLogo } from '../components/AppLogo';
 import { useWebHaptics } from "web-haptics/react";
 
@@ -76,7 +75,7 @@ export function Landing() {
 
         {/* Floating brand elements */}
         <motion.div
-          className="absolute top-20 left-10 opacity-10"
+          className="absolute top-20 left-10 opacity-5 pointer-events-none"
           animate={{
             y: [0, -20, 0],
             rotate: [0, 5, 0],
@@ -87,11 +86,15 @@ export function Landing() {
             ease: "easeInOut"
           }}
         >
-          <BrandWaves className="w-20 h-20 text-blue-500" animated={false} />
+          <AppLogo
+            size={96}
+            rounded="rounded-[28px]"
+            shadow={false}
+          />
         </motion.div>
 
         <motion.div
-          className="absolute bottom-20 right-10 opacity-10"
+          className="absolute bottom-20 right-10 opacity-5 pointer-events-none"
           animate={{
             y: [0, 20, 0],
             rotate: [0, -5, 0],
@@ -102,7 +105,11 @@ export function Landing() {
             ease: "easeInOut"
           }}
         >
-          <BrandWaves className="w-16 h-16 text-blue-500" animated={false} />
+          <AppLogo
+            size={72}
+            rounded="rounded-[24px]"
+            shadow={false}
+          />
         </motion.div>
       </div>
     </div>

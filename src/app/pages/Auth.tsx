@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { Mail, Lock, User, ArrowRight, AlertCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { BrandWaves } from '../components/BrandWaves';
+import { AppLogo } from '../components/AppLogo';
 import { useWebHaptics } from "web-haptics/react";
 
 export function Auth() {
@@ -59,9 +59,11 @@ export function Auth() {
           animate={{ scale: 1, opacity: 1 }}
           transition={{ duration: 0.5, delay: 0.2 }}
         >
-          <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-blue-600 rounded-[24px] flex items-center justify-center shadow-lg shadow-blue-500/25">
-            <BrandWaves className="w-12 h-12 text-white" animated={false} />
-          </div>
+          <AppLogo
+            size={80}
+            rounded="rounded-[24px]"
+            shadow={true}
+          />
         </motion.div>
 
         {/* Titre */}
@@ -234,7 +236,11 @@ export function Auth() {
             ease: "easeInOut"
           }}
         >
-          <BrandWaves className="w-24 h-24 text-blue-500" animated={false} />
+          <AppLogo
+            size={96}
+            rounded="rounded-[28px]"
+            shadow={false}
+          />
         </motion.div>
       </motion.div>
     </div>

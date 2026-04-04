@@ -1,5 +1,5 @@
 import { motion } from 'motion/react';
-import { BrandWaves } from './BrandWaves';
+import { AppLogo } from './AppLogo';
 
 interface SplashScreenProps {
   onComplete: () => void;
@@ -25,8 +25,12 @@ export function SplashScreen({ onComplete }: SplashScreenProps) {
           transition={{ duration: 0.6, ease: [0.34, 1.56, 0.64, 1] }}
           className="mb-8"
         >
-          <div className="w-28 h-28 mx-auto bg-white/10 backdrop-blur-xl rounded-[32px] flex items-center justify-center shadow-2xl">
-            <BrandWaves className="w-16 h-16 text-white" animated={true} />
+          <div className="w-28 h-28 mx-auto flex items-center justify-center">
+            <AppLogo
+              size={112}
+              rounded="rounded-[32px]"
+              shadow={false}
+            />
           </div>
         </motion.div>
 
