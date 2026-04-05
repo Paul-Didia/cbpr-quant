@@ -254,21 +254,21 @@ function buildBrokerLinks(symbol: string) {
       name: "Acheter sur Trade Republic",
       webUrl: `https://traderepublic.com/`,
       appUrl: null,
-      color: "from-[#1d1e20] to-[#1d1e20]",
+      color: "from-white to-white",
       logo: logoTradeRepublic,
     },
     {
       name: "Acheter sur eToro",
       webUrl: `https://www.etoro.com/discover/markets/stocks/${encodedSymbol}`,
       appUrl: `https://www.etoro.com/discover/markets/stocks/${encodedSymbol}`,
-      color: "from-[#13C636] to-[#13C636]",
+      color: "from-white to-white",
       logo: logoEtoro,
     },
     {
       name: "Acheter sur Xinvest",
       webUrl: `https://www.xinvest.tech/`,
       appUrl: null,
-      color: "from-[#ee3c3b] to-[#ee3c3b]",
+      color: "from-white to-white",
       logo: logoXInvest,
     },
   ];
@@ -856,6 +856,7 @@ export function AssetDetail() {
           </ResponsiveContainer>
         </motion.div>
 
+        {/* Signal */}
         <motion.div
           className="bg-white rounded-3xl px-5 py-4 mb-6 shadow-sm border border-gray-100"
           initial={{ opacity: 0, y: 20 }}
@@ -884,58 +885,7 @@ export function AssetDetail() {
           </div>
         </motion.div>
 
-        <motion.div
-          className="mb-6"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.23, duration: 0.5 }}
-        >
-          <div className="text-xs text-gray-400 mb-3 tracking-wide uppercase px-1">
-            Acheter cet actif
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            {brokerLinks.map((platform, index) => (
-              <motion.button
-                key={platform.name}
-                type="button"
-                onClick={() => openBrokerLink(platform.webUrl, platform.appUrl)}
-                className={`relative overflow-hidden rounded-2xl bg-gradient-to-br ${platform.color} px-4 py-3 shadow-md hover:shadow-lg transition-all group min-h-[84px] flex items-center`}
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{
-                  delay: 0.25 + index * 0.08,
-                  duration: 0.4,
-                }}
-                whileHover={{ scale: 1.03, y: -2 }}
-                whileTap={{ scale: 0.98 }}
-                style={{
-                  backdropFilter: "blur(10px)",
-                  WebkitBackdropFilter: "blur(10px)",
-                }}
-              >
-                <div className="relative flex items-center justify-between w-full gap-3">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-9 h-9 rounded-xl bg-white/12 flex items-center justify-center overflow-hidden flex-shrink-0">
-                      <img
-                        src={platform.logo}
-                        alt={platform.name}
-                        className="w-5 h-5 object-contain"
-                        loading="lazy"
-                      />
-                    </div>
-                    <div className="min-w-0">
-                      <div className="text-white font-semibold text-[17px] leading-tight tracking-tight truncate">
-                        {platform.name}
-                      </div>
-                    </div>
-                  </div>
-                  <ExternalLink className="w-4 h-4 text-white group-hover:scale-105 transition-all flex-shrink-0" />
-                </div>
-              </motion.button>
-            ))}
-          </div>
-        </motion.div>
-
+        {/* indicateurs techniques */}
         <motion.div
           className="bg-white rounded-3xl p-5 mb-6 shadow-sm border border-gray-100"
           initial={{ opacity: 0, y: 20 }}
@@ -987,6 +937,60 @@ export function AssetDetail() {
           </div>
         </motion.div>
 
+        {/* achet cet actif */}
+        <motion.div
+          className="mb-6"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.23, duration: 0.5 }}
+        >
+          <div className="text-xs text-gray-400 mb-3 tracking-wide uppercase px-1">
+            Acheter cet actif
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {brokerLinks.map((platform, index) => (
+              <motion.button
+                key={platform.name}
+                type="button"
+                onClick={() => openBrokerLink(platform.webUrl, platform.appUrl)}
+                className={`relative overflow-hidden rounded-3xl bg-gradient-to-br ${platform.color} px-4 py-3 shadow-sm hover:shadow-md transition-all group min-h-[84px] flex items-center border border-gray-100`}
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{
+                  delay: 0.25 + index * 0.08,
+                  duration: 0.4,
+                }}
+                whileHover={{ scale: 1.03, y: -2 }}
+                whileTap={{ scale: 0.98 }}
+                style={{
+                  backdropFilter: "blur(10px)",
+                  WebkitBackdropFilter: "blur(10px)",
+                }}
+              >
+                <div className="relative flex items-center justify-between w-full gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-9 h-9 rounded-2xl overflow-hidden flex-shrink-0 border border-gray-100 bg-white">
+                      <img
+                        src={platform.logo}
+                        alt={platform.name}
+                        className="w-full h-full object-cover"
+                        loading="lazy"
+                      />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-gray-700 text-[15px] leading-tight tracking-tight truncate">
+                        {platform.name}
+                      </div>
+                    </div>
+                  </div>
+                  {/* <ExternalLink className="w-4 h-4 text-gray-500 group-hover:text-gray-900 group-hover:scale-105 transition-all flex-shrink-0" /> */}
+                </div>
+              </motion.button>
+            ))}
+          </div>
+        </motion.div>
+
+        {/* à propos de l'actif */}
         <motion.div
           className="bg-white rounded-3xl p-5 mb-6 shadow-sm border border-gray-100"
           initial={{ opacity: 0, y: 20 }}
@@ -999,6 +1003,7 @@ export function AssetDetail() {
           <p className="text-sm text-gray-600 leading-relaxed">{asset.description}</p>
         </motion.div>
 
+        {/* synthèse récente */}
         <motion.div
           className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100"
           initial={{ opacity: 0, y: 20 }}
