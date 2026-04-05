@@ -129,14 +129,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'apikey': publicAnonKey,
+          'Authorization': `Bearer ${publicAnonKey}`,
         },
         body: JSON.stringify({ email, password, name }),
       }
     );
 
+    const data = await response.json().catch(() => null);
+
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Signup failed');
+      console.error('Signup response error:', {
+        status: response.status,
+        data,
+      });
+      throw new Error(data?.error || data?.message || `Signup failed (${response.status})`);
     }
 
     await login(email, password);

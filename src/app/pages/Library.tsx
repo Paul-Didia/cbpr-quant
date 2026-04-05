@@ -311,10 +311,10 @@ export function Library() {
           query
             ? 50
             : selectedCategory === "all"
-              ? 5000
+              ? 300
               : selectedCategory === "stock"
-                ? 3000
-                : 1500;
+                ? 300
+                : 150;
 
         const data = query
           ? await apiService.searchAssets(query, selectedCategory, limit)
@@ -379,19 +379,7 @@ export function Library() {
     { id: "crypto" as const, label: "Crypto", icon: "฿" },
   ];
 
-  useEffect(() => {
-    if (assets.length > 0) {
-      console.log(
-        "Library assets loaded:",
-        assets.length,
-        assets.map((asset) => ({
-          symbol: asset.symbol,
-          name: asset.name,
-          assetType: asset.assetType,
-        })),
-      );
-    }
-  }, [assets]);
+
 
   const SkeletonList = () => (
     <div className="space-y-3">
@@ -566,12 +554,9 @@ export function Library() {
               return (
                 <motion.div
                   key={asset.id}
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{
-                    delay: index * 0.05,
-                    duration: 0.4,
-                  }}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.18 }}
                 >
                   {isAllowed ? (
                     <Link

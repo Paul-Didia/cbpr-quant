@@ -22,7 +22,7 @@ app.use(
   "/*",
   cors({
     origin: "*",
-    allowHeaders: ["Content-Type", "Authorization"],
+    allowHeaders: ["Content-Type", "Authorization", "apikey"],
     allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     exposeHeaders: ["Content-Length"],
     maxAge: 600,
@@ -133,14 +133,17 @@ app.get("/make-server-819c6d9b/diagnostic", async (c: Context) => {
 
 // Sign up
 app.post("/make-server-819c6d9b/auth/signup", async (c: Context) => {
+  console.log("SIGNUP ROUTE HIT");
+
   try {
     const { email, password, name } = await c.req.json();
+    console.log("SIGNUP PAYLOAD:", { email, name });
 
     const { data, error } = await supabase.auth.admin.createUser({
       email,
       password,
       user_metadata: { name },
-      email_confirm: true, // Auto-confirm email since email server not configured
+      email_confirm: true,
     });
 
     if (error) {
@@ -148,7 +151,6 @@ app.post("/make-server-819c6d9b/auth/signup", async (c: Context) => {
       return c.json({ error: error.message }, 400);
     }
 
-    // Create user profile in KV store
     await kv.set(`user:${data.user.id}:profile`, {
       email,
       name,
@@ -157,6 +159,7 @@ app.post("/make-server-819c6d9b/auth/signup", async (c: Context) => {
     });
 
     return c.json({ user: data.user });
+
   } catch (error) {
     console.log('Signup error:', error);
     return c.json({ error: 'Signup failed' }, 500);
