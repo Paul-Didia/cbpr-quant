@@ -17,7 +17,7 @@ export function Layout() {
   };
   
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col pb-24">
+    <div className="min-h-screen bg-gray-50 flex flex-col pb-24 overflow-x-hidden">
       {/* Main Content */}
       <main className="flex-1 pt-4 pb-6">
         <Outlet />
@@ -25,22 +25,27 @@ export function Layout() {
       
       {/* Bottom Navigation */}
       <motion.nav 
-        className="fixed bottom-0 left-0 right-0 z-[100000] bg-white/90 backdrop-blur-xl border-t border-gray-200/50 pb-safe"
+        className="fixed bottom-0 left-0 right-0 z-[100000] isolate pointer-events-auto touch-manipulation select-none bg-white/95 backdrop-blur-xl border-t border-gray-200/50 pb-safe"
+        style={{ WebkitTapHighlightColor: 'transparent' }}
         initial={{ y: 100 }}
         animate={{ y: 0 }}
         transition={{ duration: 0.6, ease: [0.25, 0.46, 0.45, 0.94] }}
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-around items-center h-20">
-            <Link to="/home" onClick={triggerNavHaptic}>
+          <div className="grid grid-cols-3 items-stretch h-20">
+            <Link
+              to="/home"
+              onClick={triggerNavHaptic}
+              className="h-full w-full flex items-center justify-center touch-manipulation"
+            >
               <motion.div
-                className={`flex flex-col items-center gap-1 px-6 py-2 rounded-xl transition-all ${
+                className={`w-full h-full flex flex-col items-center justify-center gap-1 rounded-xl transition-all ${
                   isActive('/home')
                     ? 'text-blue-500'
                     : 'text-gray-500'
                 }`}
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.93 }}
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.96 }}
               >
                 <Home className="w-6 h-6" strokeWidth={isActive('/home') ? 2.5 : 2} />
                 <motion.span 
@@ -52,15 +57,19 @@ export function Layout() {
               </motion.div>
             </Link>
             
-            <Link to="/library" onClick={triggerNavHaptic}>
+            <Link
+              to="/library"
+              onClick={triggerNavHaptic}
+              className="h-full w-full flex items-center justify-center touch-manipulation"
+            >
               <motion.div
-                className={`flex flex-col items-center gap-1 px-6 py-2 rounded-xl transition-all ${
+                className={`w-full h-full flex flex-col items-center justify-center gap-1 rounded-xl transition-all ${
                   isActive('/library')
                     ? 'text-blue-500'
                     : 'text-gray-500'
                 }`}
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.93 }}
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.96 }}
               >
                 <Library className="w-6 h-6" strokeWidth={isActive('/library') ? 2.5 : 2} />
                 <motion.span 
@@ -72,15 +81,19 @@ export function Layout() {
               </motion.div>
             </Link>
 
-            <Link to="/profile" onClick={triggerNavHaptic}>
+            <Link
+              to="/profile"
+              onClick={triggerNavHaptic}
+              className="h-full w-full flex items-center justify-center touch-manipulation"
+            >
               <motion.div
-                className={`flex flex-col items-center gap-1 px-6 py-2 rounded-xl transition-all ${
+                className={`w-full h-full flex flex-col items-center justify-center gap-1 rounded-xl transition-all ${
                   isActive('/profile')
                     ? 'text-blue-500'
                     : 'text-gray-500'
                 }`}
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.93 }}
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.96 }}
               >
                 <User className="w-6 h-6" strokeWidth={isActive('/profile') ? 2.5 : 2} />
                 <motion.span 
