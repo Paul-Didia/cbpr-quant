@@ -21,22 +21,22 @@ type LibraryAsset = {
 type UserPlan = "free" | "pro" | "quant";
 
 const FREE_STOCK_SYMBOLS = new Set([
-  "AAPL","MSFT","AMZN","GOOGL","META","NVDA","TSLA","JPM","JNJ","V",
-  "WMT","PG","XOM","UNH","KO","DIS","NFLX","INTC","AMD","CSCO",
-  "ORCL","IBM","BA","NKE","PFE","MRK","CVX","MCD","COST","PEP",
-  "ABT","AVGO","TMO","ACN","QCOM","TXN","HON","LIN","UPS","PM",
-  "RTX","LOW","INTU","AMGN","SPGI","CAT","GS","DE","BLK","MDT",
-  "ISRG","NOW","BKNG","ADBE","PLD","SYK","GILD","ADI","VRTX","ZTS",
-  "CB","CI","MO","LMT","SCHW","DUK","MMC","SO","USB","BDX",
-  "FIS","PNC","T","APD","CSX","NSC","ICE","GM","F","ETN",
-  "EMR","EOG","MPC","PSX","KMI","SLB","COP","HAL","DVN","OXY",
-  "AIG","MET","PRU","ALL","TRV","AXP","COF","DFS","PYPL","SQ",
-  "CRM","SNOW","SHOP","UBER","LYFT","TWLO","DDOG","NET","OKTA","ZS",
-  "CRWD","PANW","FTNT","TEAM","WDAY","DOCU","ROKU","TTD","SPOT","EA",
-  "ATVI","TTWO","RBLX","U","PLTR","AI","SMCI","MRVL","KLAC","LRCX",
-  "ASML","NXPI","ON","MPWR","SWKS","QRVO","CDNS","SNPS","ANSS","PAYC",
-  "PAYX","ADP","HPQ","DELL","HPE","SONY","NTDOY","BABA","JD",
-  "PDD","TCEHY","BIDU","SE","MELI","TSM","INFY","SAP","ORAN","VOD"
+  "AAPL", "MSFT", "AMZN", "GOOGL", "META", "NVDA", "TSLA", "JPM", "JNJ", "V",
+  "WMT", "PG", "XOM", "UNH", "KO", "DIS", "NFLX", "INTC", "AMD", "CSCO",
+  "ORCL", "IBM", "BA", "NKE", "PFE", "MRK", "CVX", "MCD", "COST", "PEP",
+  "ABT", "AVGO", "TMO", "ACN", "QCOM", "TXN", "HON", "LIN", "UPS", "PM",
+  "RTX", "LOW", "INTU", "AMGN", "SPGI", "CAT", "GS", "DE", "BLK", "MDT",
+  "ISRG", "NOW", "BKNG", "ADBE", "PLD", "SYK", "GILD", "ADI", "VRTX", "ZTS",
+  "CB", "CI", "MO", "LMT", "SCHW", "DUK", "MMC", "SO", "USB", "BDX",
+  "FIS", "PNC", "T", "APD", "CSX", "NSC", "ICE", "GM", "F", "ETN",
+  "EMR", "EOG", "MPC", "PSX", "KMI", "SLB", "COP", "HAL", "DVN", "OXY",
+  "AIG", "MET", "PRU", "ALL", "TRV", "AXP", "COF", "DFS", "PYPL", "SQ",
+  "CRM", "SNOW", "SHOP", "UBER", "LYFT", "TWLO", "DDOG", "NET", "OKTA", "ZS",
+  "CRWD", "PANW", "FTNT", "TEAM", "WDAY", "DOCU", "ROKU", "TTD", "SPOT", "EA",
+  "ATVI", "TTWO", "RBLX", "U", "PLTR", "AI", "SMCI", "MRVL", "KLAC", "LRCX",
+  "ASML", "NXPI", "ON", "MPWR", "SWKS", "QRVO", "CDNS", "SNPS", "ANSS", "PAYC",
+  "PAYX", "ADP", "HPQ", "DELL", "HPE", "SONY", "NTDOY", "BABA", "JD",
+  "PDD", "TCEHY", "BIDU", "SE", "MELI", "TSM", "INFY", "SAP", "ORAN", "VOD"
 ]);
 
 const LIBRARY_CACHE_KEY = "cbpr_library_cache_v1";
@@ -182,6 +182,7 @@ export function Library() {
   const { trigger } = useWebHaptics();
   const triggerAssetTap = () => trigger("light");
   const triggerFavoriteTap = () => trigger("success");
+  const triggerMediumTap = () => trigger("medium");
   const { user } = useAuth();
   const [optimisticFavorites, setOptimisticFavorites] = useState<Record<string, boolean>>({});
   const [favoriteBursts, setFavoriteBursts] = useState<Record<string, number>>({});
@@ -193,6 +194,17 @@ export function Library() {
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
+
+  const handleSearchChange = (value: string) => {
+    const trimmedNext = value.trim();
+    const trimmedCurrent = searchQuery.trim();
+
+    if (!trimmedCurrent && trimmedNext) {
+      triggerMediumTap();
+    }
+
+    setSearchQuery(value);
+  };
 
   const currentPlan: UserPlan = user?.subscription || "free";
 
@@ -438,7 +450,7 @@ export function Library() {
               type="text"
               placeholder="Rechercher un actif..."
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => handleSearchChange(e.target.value)}
               className="w-full pl-12 pr-12 py-3.5 bg-white border border-gray-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-gray-900 placeholder-gray-400"
             />
             <AnimatePresence>
@@ -447,7 +459,10 @@ export function Library() {
                   initial={{ opacity: 0, scale: 0.8 }}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.8 }}
-                  onClick={() => setSearchQuery("")}
+                  onClick={() => {
+                    triggerMediumTap();
+                    setSearchQuery("");
+                  }}
                   className="absolute right-4 top-1/2 -translate-y-1/2 p-1 hover:bg-gray-100 rounded-full transition-all"
                   whileHover={{ scale: 1.1 }}
                   whileTap={{ scale: 0.9 }}
@@ -468,7 +483,10 @@ export function Library() {
           {categories.map((category, index) => (
             <motion.button
               key={category.id}
-              onClick={() => setSelectedCategory(category.id)}
+              onClick={() => {
+                triggerMediumTap();
+                setSelectedCategory(category.id);
+              }}
               className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all ${selectedCategory === category.id
                 ? "bg-blue-500 text-white"
                 : "bg-white text-gray-700 border border-gray-200 hover:border-blue-300"
@@ -620,9 +638,8 @@ export function Library() {
                                 className="relative z-10 pointer-events-none"
                               >
                                 <Star
-                                  className={`w-5 h-5 transition-colors duration-200 ${
-                                    isWatched ? "fill-yellow-400 text-yellow-400" : "text-gray-400"
-                                  }`}
+                                  className={`w-5 h-5 transition-colors duration-200 ${isWatched ? "fill-yellow-400 text-yellow-400" : "text-gray-400"
+                                    }`}
                                 />
                               </motion.div>
                             </motion.button>
@@ -683,9 +700,8 @@ export function Library() {
                               className="relative z-10 pointer-events-none"
                             >
                               <Star
-                                className={`w-5 h-5 transition-colors duration-200 ${
-                                  isWatched ? "fill-yellow-400 text-yellow-400" : "text-gray-400"
-                                }`}
+                                className={`w-5 h-5 transition-colors duration-200 ${isWatched ? "fill-yellow-400 text-yellow-400" : "text-gray-400"
+                                  }`}
                               />
                             </motion.div>
                           </motion.button>

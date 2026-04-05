@@ -1,9 +1,16 @@
 import { Link, Outlet, useLocation } from 'react-router';
 import { Home, Library, User } from 'lucide-react';
 import { motion } from 'motion/react';
+import { useWebHaptics } from 'web-haptics/react';
 
 export function Layout() {
   const location = useLocation();
+
+  const { trigger } = useWebHaptics();
+
+  const triggerNavHaptic = () => {
+    trigger('medium');
+  };
   
   const isActive = (path: string) => {
     return location.pathname === path;
@@ -25,7 +32,7 @@ export function Layout() {
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-around items-center h-20">
-            <Link to="/home">
+            <Link to="/home" onClick={triggerNavHaptic}>
               <motion.div
                 className={`flex flex-col items-center gap-1 px-6 py-2 rounded-xl transition-all ${
                   isActive('/home')
@@ -33,7 +40,7 @@ export function Layout() {
                     : 'text-gray-500'
                 }`}
                 whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
+                whileTap={{ scale: 0.93 }}
               >
                 <Home className="w-6 h-6" strokeWidth={isActive('/home') ? 2.5 : 2} />
                 <motion.span 
@@ -45,7 +52,7 @@ export function Layout() {
               </motion.div>
             </Link>
             
-            <Link to="/library">
+            <Link to="/library" onClick={triggerNavHaptic}>
               <motion.div
                 className={`flex flex-col items-center gap-1 px-6 py-2 rounded-xl transition-all ${
                   isActive('/library')
@@ -53,7 +60,7 @@ export function Layout() {
                     : 'text-gray-500'
                 }`}
                 whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
+                whileTap={{ scale: 0.93 }}
               >
                 <Library className="w-6 h-6" strokeWidth={isActive('/library') ? 2.5 : 2} />
                 <motion.span 
@@ -65,7 +72,7 @@ export function Layout() {
               </motion.div>
             </Link>
 
-            <Link to="/profile">
+            <Link to="/profile" onClick={triggerNavHaptic}>
               <motion.div
                 className={`flex flex-col items-center gap-1 px-6 py-2 rounded-xl transition-all ${
                   isActive('/profile')
@@ -73,7 +80,7 @@ export function Layout() {
                     : 'text-gray-500'
                 }`}
                 whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
+                whileTap={{ scale: 0.93 }}
               >
                 <User className="w-6 h-6" strokeWidth={isActive('/profile') ? 2.5 : 2} />
                 <motion.span 
