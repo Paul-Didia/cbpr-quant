@@ -266,7 +266,7 @@ function buildBrokerLinks(symbol: string) {
     },
     {
       name: "Acheter sur Xinvest",
-      webUrl: `https://www.xinvest.com/`,
+      webUrl: `https://www.xinvest.tech/`,
       appUrl: null,
       color: "from-[#ee3c3b] to-[#ee3c3b]",
       logo: logoXInvest,
