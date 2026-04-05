@@ -1,5 +1,5 @@
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { ArrowLeft, Star } from "lucide-react";
+import { ArrowLeft, ExternalLink, Star } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "motion/react";
 import { PageTransition } from "../components/PageTransition";
@@ -9,6 +9,9 @@ import { useAuth } from "../contexts/AuthContext";
 import { apiService } from "../services/api";
 import { type AssetType } from "../data/mockAssets";
 import { useWebHaptics } from "web-haptics/react";
+import logoEtoro from "../assets/logo_etoro.png";
+import logoTradeRepublic from "../assets/logo_trade_rep.png";
+import logoXInvest from "../assets/logo_x_invest.png";
 import {
   ComposedChart,
   Area,
@@ -241,6 +244,63 @@ function buildNewsPlaceholders(symbol: string, signal: string, score: number) {
       title: `Ajoutez ${symbol} aux favoris pour le suivre depuis votre watchlist CBPR.`,
     },
   ];
+}
+
+function buildBrokerLinks(symbol: string) {
+  const encodedSymbol = encodeURIComponent(symbol);
+
+  return [
+    {
+      name: "Acheter sur Trade Republic",
+      webUrl: `https://traderepublic.com/`,
+      appUrl: null,
+      color: "from-[#1d1e20] to-[#1d1e20]",
+      logo: logoTradeRepublic,
+    },
+    {
+      name: "Acheter sur eToro",
+      webUrl: `https://www.etoro.com/discover/markets/stocks/${encodedSymbol}`,
+      appUrl: `https://www.etoro.com/discover/markets/stocks/${encodedSymbol}`,
+      color: "from-[#13C636] to-[#13C636]",
+      logo: logoEtoro,
+    },
+    {
+      name: "Acheter sur Xinvest",
+      webUrl: `https://www.xinvest.com/`,
+      appUrl: null,
+      color: "from-[#ee3c3b] to-[#ee3c3b]",
+      logo: logoXInvest,
+    },
+  ];
+}
+
+function openBrokerLink(webUrl: string, appUrl?: string | null) {
+  if (typeof window === "undefined") return;
+
+  if (appUrl) {
+    const fallback = window.setTimeout(() => {
+      window.open(webUrl, "_blank", "noopener,noreferrer");
+    }, 700);
+
+    const clearFallback = () => {
+      window.clearTimeout(fallback);
+      window.removeEventListener("pagehide", clearFallback);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        clearFallback();
+      }
+    };
+
+    window.addEventListener("pagehide", clearFallback);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.location.href = appUrl;
+    return;
+  }
+
+  window.open(webUrl, "_blank", "noopener,noreferrer");
 }
 
 function mapToAssetDetail(assetResponse: any, analysisResponse: any, symbol: string): AssetDetailData {
@@ -510,6 +570,7 @@ export function AssetDetail() {
 
   const opportunityGradientId = `opportunityGradient-${asset?.id || "unknown"}`;
   const riskGradientId = `riskGradient-${asset?.id || "unknown"}`;
+  const brokerLinks = asset ? buildBrokerLinks(asset.symbol) : [];
 
   if (isLoading) {
     return (
@@ -820,6 +881,58 @@ export function AssetDetail() {
             <div className="text-sm font-semibold text-gray-900">
               Score {asset.score}/100
             </div>
+          </div>
+        </motion.div>
+
+        <motion.div
+          className="mb-6"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.23, duration: 0.5 }}
+        >
+          <div className="text-xs text-gray-400 mb-3 tracking-wide uppercase px-1">
+            Acheter cet actif
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {brokerLinks.map((platform, index) => (
+              <motion.button
+                key={platform.name}
+                type="button"
+                onClick={() => openBrokerLink(platform.webUrl, platform.appUrl)}
+                className={`relative overflow-hidden rounded-2xl bg-gradient-to-br ${platform.color} px-4 py-3 shadow-md hover:shadow-lg transition-all group min-h-[84px] flex items-center`}
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{
+                  delay: 0.25 + index * 0.08,
+                  duration: 0.4,
+                }}
+                whileHover={{ scale: 1.03, y: -2 }}
+                whileTap={{ scale: 0.98 }}
+                style={{
+                  backdropFilter: "blur(10px)",
+                  WebkitBackdropFilter: "blur(10px)",
+                }}
+              >
+                <div className="relative flex items-center justify-between w-full gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-9 h-9 rounded-xl bg-white/12 flex items-center justify-center overflow-hidden flex-shrink-0">
+                      <img
+                        src={platform.logo}
+                        alt={platform.name}
+                        className="w-5 h-5 object-contain"
+                        loading="lazy"
+                      />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-white font-semibold text-[17px] leading-tight tracking-tight truncate">
+                        {platform.name}
+                      </div>
+                    </div>
+                  </div>
+                  <ExternalLink className="w-4 h-4 text-white group-hover:scale-105 transition-all flex-shrink-0" />
+                </div>
+              </motion.button>
+            ))}
           </div>
         </motion.div>
 
