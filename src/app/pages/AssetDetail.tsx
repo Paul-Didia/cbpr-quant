@@ -983,7 +983,7 @@ export function AssetDetail() {
                       </div>
                     </div>
                   </div>
-                  {/* <ExternalLink className="w-4 h-4 text-gray-500 group-hover:text-gray-900 group-hover:scale-105 transition-all flex-shrink-0" /> */}
+                  <ExternalLink className="w-4 h-4 text-gray-500 group-hover:text-gray-400 group-hover:scale-105 transition-all flex-shrink-0" />
                 </div>
               </motion.button>
             ))}
