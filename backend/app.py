@@ -129,6 +129,7 @@ def normalize_quote_item(item: dict[str, Any]) -> dict[str, Any]:
 
 
 # Helper to get Stripe plan by email
+
 # Helper to get Stripe plan by email
 def get_stripe_plan_by_email(email: str) -> str:
     admin_emails = [
@@ -151,22 +152,30 @@ def get_stripe_plan_by_email(email: str) -> str:
             return "free"
 
         customer = customers.data[0]
-        subscriptions = stripe.Subscription.list(customer=customer.id, status="active", limit=10)
+        subscriptions = stripe.Subscription.list(
+            customer=customer.id,
+            status="active",
+            limit=10,
+        )
 
         if not subscriptions.data:
             return "free"
 
         for subscription in subscriptions.data:
-            items = subscription.get("items", {}).get("data", [])
+            items_obj = getattr(subscription, "items", None)
+            items = getattr(items_obj, "data", []) or []
+
             for item in items:
-                price_id = item.get("price", {}).get("id")
+                price_obj = getattr(item, "price", None)
+                price_id = getattr(price_obj, "id", None)
+
                 plan = PRICE_TO_PLAN.get(price_id)
                 if plan:
                     return plan
 
         return "free"
     except Exception as e:
-        print(f"Stripe subscription lookup error for {normalized_email}: {e}")
+        print(f"Stripe subscription lookup error for {normalized_email}: {repr(e)}")
         return "free"
 
 
