@@ -1,5 +1,5 @@
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { ArrowLeft, ExternalLink, Star } from "lucide-react";
+import { ArrowLeft, ExternalLink, HelpCircle, Star, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "motion/react";
 import { PageTransition } from "../components/PageTransition";
@@ -45,16 +45,23 @@ type AssetDetailData = {
     sma200: number;
     sma200Upper: number;
     sma200Lower: number;
+    pivotLine: number | null;
   }>;
   smaChannel: {
     sma200: number | null;
     upper: number | null;
     lower: number | null;
   };
+  legend: Array<{
+    label: string;
+    color: string;
+  }>;
   technicalIndicators: {
     channelDirection: string;
     bollingerBands: string;
-    nearestLevel: string;
+    pivot: string;
+    sma200: string;
+    timeInBuyZone: string;
     rsi: string;
     macd: string;
   };
@@ -182,6 +189,7 @@ function formatChange(change: number, changePercent: number, currency?: string) 
   return `${formattedChange} | ${formattedPercent}`;
 }
 
+
 function getStatusLabel(status: AssetDetailData["status"]) {
   switch (status) {
     case "opportunity":
@@ -193,6 +201,98 @@ function getStatusLabel(status: AssetDetailData["status"]) {
     default:
       return "Statut inconnu";
   }
+}
+
+function getOpportunityLabel(status: AssetDetailData["status"]) {
+  switch (status) {
+    case "opportunity":
+      return "Niveau d’opportunité";
+    case "risk":
+      return "Niveau de risque";
+    case "neutral":
+      return "Niveau de neutralité";
+    default:
+      return "Niveau du contexte";
+  }
+}
+
+const TECHNICAL_INDICATOR_HELP: Record<
+  string,
+  {
+    title: string;
+    description: string;
+    insight: string;
+  }
+> = {
+  "Direction du canal": {
+    title: "Direction du canal",
+    description:
+      "Cet indicateur montre dans quel sens évolue le prix par rapport à son canal CBPR autour de la SMA200. Il aide à situer rapidement l’actif dans son contexte global.",
+    insight:
+      "Il permet de comprendre le contexte dominant : haussier, baissier ou neutre.",
+  },
+  "Bande Bollinger": {
+    title: "Bande Bollinger",
+    description:
+      "Les bandes de Bollinger mesurent l’écart du prix autour de sa moyenne récente. Elles servent à repérer les phases de tension, d’excès ou d’accalmie.",
+    insight:
+      "Elles permettent de lire la volatilité de l’actif et de voir si le prix est dans une zone d’extension ou de retour à l’équilibre.",
+  },
+  "Pivot": {
+    title: "Pivot",
+    description:
+      "Le pivot est un niveau horizontal réel de marché, issu d’un dernier creux ou sommet significatif. Il sert de point d’appui ou de rejet dans la lecture CBPR.",
+    insight:
+      "Il permet de voir si le prix actuel se rapproche d’un niveau de réaction concret, utile pour confirmer ou affaiblir le signal.",
+  },
+  RSI: {
+    title: "RSI",
+    description:
+      "Le RSI mesure le rythme et l’intensité du mouvement récent du prix. Il sert à repérer les excès haussiers ou baissiers.",
+    insight:
+      "Il permet de voir si le mouvement actuel semble trop fort, trop faible, ou déjà excessif.",
+  },
+  "MACD / Signal": {
+    title: "MACD / Signal",
+    description:
+      "Le MACD compare plusieurs moyennes pour lire l’élan du marché. La ligne Signal sert de repère pour détecter un changement de dynamique.",
+    insight:
+      "Il permet de comprendre si la dynamique gagne en force, ralentit, ou commence à se retourner.",
+  },
+  "Prix moyen": {
+    title: "Prix moyen",
+    description:
+      "Le prix moyen sur 200 périodes ou SMA200 est une moyenne mobile longue qui résume la tendance de fond de l’actif. Elle sert de repère central dans la lecture du canal CBPR.",
+    insight:
+      "Elle permet de voir rapidement si le prix évolue au-dessus, au-dessous, ou autour de sa tendance longue.",
+  },
+  "Nombre de jours consécutifs en zone d'achat": {
+    title: "Nombre de jours consécutifs en zone d'achat",
+    description:
+      "Cet indicateur mesure depuis combien de jours l’actif reste dans la zone d’achat CBPR sans réelle reprise. Une durée trop longue affaiblit la qualité de l’opportunité.",
+    insight:
+      "Il permet de repérer quand une opportunité théorique commence à ressembler davantage à un risque persistant.",
+  },
+};
+
+function getNearestPivotLevel(
+  currentPrice: number,
+  pivotSupport: number | null,
+  pivotResistance: number | null,
+  currency: string,
+) {
+  const levels = [
+    Number.isFinite(pivotSupport) ? pivotSupport : null,
+    Number.isFinite(pivotResistance) ? pivotResistance : null,
+  ].filter((level): level is number => level !== null && Number.isFinite(level));
+  if (!levels.length || !Number.isFinite(currentPrice)) {
+    return "Indisponible";
+  }
+  const nearest = levels.reduce((best, level) => {
+    return Math.abs(level - currentPrice) < Math.abs(best - currentPrice) ? level : best;
+  }, levels[0]);
+  const side = nearest <= currentPrice ? "Support" : "Résistance";
+  return `${side} : ${formatCurrency(nearest, currency)}`;
 }
 
 function mapSignalToStatus(signal?: string): AssetDetailData["status"] {
@@ -315,18 +415,8 @@ function mapToAssetDetail(assetResponse: any, analysisResponse: any, symbol: str
   );
 
   const values = Array.isArray(analysisResponse?.values) ? analysisResponse.values : [];
-  const chartData = values
-    .slice()
-    .map((point: any) => ({
-      date: String(point?.datetime || ""),
-      price: Number(point?.close || 0),
-      zone: status,
-      sma200: Number(point?.SMA200 ?? NaN),
-      sma200Upper: Number(point?.SMA200_upper ?? NaN),
-      sma200Lower: Number(point?.SMA200_lower ?? NaN),
-    }))
-    .filter((point: { price: number }) => Number.isFinite(point.price));
 
+  // Define these before any use of currentPrice in pivot calculations
   const currentPrice = Number(quote?.price || indicators?.currentPrice || 0);
   const change = Number(quote?.change || 0);
   const changePercent = Number(quote?.changePercent || 0);
@@ -336,15 +426,56 @@ function mapToAssetDetail(assetResponse: any, analysisResponse: any, symbol: str
   const currency = String(quote?.currency || "USD");
   const name = String(quote?.name || symbol);
 
+  // read indicators for pivots
+  const pivotSupport = Number(indicators?.pivotSupport);
+  const pivotResistance = Number(indicators?.pivotResistance);
+  // Find the pivot line value for chart: nearest valid pivot (support or resistance) to currentPrice, or null if none
+  let pivotLineValue: number | null = null;
+  if (Number.isFinite(pivotSupport) && Number.isFinite(pivotResistance)) {
+    // Both valid: pick nearest
+    pivotLineValue =
+      Math.abs(pivotSupport - currentPrice) <= Math.abs(pivotResistance - currentPrice)
+        ? pivotSupport
+        : pivotResistance;
+  } else if (Number.isFinite(pivotSupport)) {
+    pivotLineValue = pivotSupport;
+  } else if (Number.isFinite(pivotResistance)) {
+    pivotLineValue = pivotResistance;
+  } else {
+    pivotLineValue = null;
+  }
+
+  const chartData = values
+    .slice()
+    .map((point: any) => ({
+      date: String(point?.datetime || ""),
+      price: Number(point?.close || 0),
+      zone: status,
+      sma200: Number(point?.SMA200 ?? NaN),
+      sma200Upper: Number(point?.SMA200_upper ?? NaN),
+      sma200Lower: Number(point?.SMA200_lower ?? NaN),
+      pivotLine: Number.isFinite(pivotLineValue) ? (pivotLineValue as number) : null,
+    }))
+    .filter((point: { price: number }) => Number.isFinite(point.price));
+
   const sma200 = Number(indicators?.sma200);
   const rsi14 = Number(indicators?.rsi14);
   const macd = Number(indicators?.macd);
   const macdSignal = Number(indicators?.macdSignal);
-  const direction = String(indicators?.direction || "");
+  const channelDirection = String(indicators?.channelDirection || indicators?.direction || "");
   const bollingerZone = String(indicators?.bollingerZone || "Indisponible");
   const smaMargin = getSmaChannelMargin(assetType);
   const smaUpper = Number.isFinite(sma200) ? sma200 * (1 + smaMargin) : null;
   const smaLower = Number.isFinite(sma200) ? sma200 * (1 - smaMargin) : null;
+
+  const buyZoneDays = Number(indicators?.buyZoneDays || 0);
+  // Use new pivot function
+  const nearestPivotLevel = getNearestPivotLevel(
+    currentPrice,
+    Number.isFinite(pivotSupport) ? pivotSupport : null,
+    Number.isFinite(pivotResistance) ? pivotResistance : null,
+    currency,
+  );
 
   return {
     id: symbol,
@@ -368,21 +499,44 @@ function mapToAssetDetail(assetResponse: any, analysisResponse: any, symbol: str
       upper: Number.isFinite(sma200) ? sma200 * (1 + getSmaChannelMargin(assetType)) : null,
       lower: Number.isFinite(sma200) ? sma200 * (1 - getSmaChannelMargin(assetType)) : null,
     },
-
+    legend: [
+      {
+        label: "Prix pivot",
+        color: "#58585827",
+      },
+      {
+        label: "Prix moyen",
+        color: "#0055ff61",
+      },
+      {
+        label: "Canal",
+        color: "#0055ff",
+      },
+    ],
     technicalIndicators: {
       channelDirection:
-        direction === "achat"
+        channelDirection === "haussier"
           ? "Haussier"
-          : direction === "vente"
+          : channelDirection === "baissier"
             ? "Baissier"
-            : "Neutre",
+            : channelDirection === "achat"
+              ? "Baissier"
+              : channelDirection === "vente"
+                ? "Haussier"
+                : "Neutre",
 
       bollingerBands: bollingerZone,
 
-      nearestLevel:
-        Number.isFinite(sma200)
-          ? `SMA200 : ${formatCurrency(sma200, currency)}`
-          : "Indisponible",
+      pivot: nearestPivotLevel,
+
+      sma200: Number.isFinite(sma200)
+        ? formatCurrency(sma200, currency)
+        : "Indisponible",
+
+      timeInBuyZone:
+        buyZoneDays > 0
+          ? `${buyZoneDays} jour${buyZoneDays > 1 ? "s" : ""}`
+          : "0 jour",
 
       rsi: Number.isFinite(rsi14)
         ? `${rsi14.toFixed(1)}`
@@ -415,6 +569,7 @@ export function AssetDetail() {
   const [asset, setAsset] = useState<AssetDetailData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
+  const [openIndicatorHelp, setOpenIndicatorHelp] = useState<string | null>(null);
   const currentPlan: UserPlan = user?.subscription || "free";
 
   useEffect(() => {
@@ -565,12 +720,44 @@ export function AssetDetail() {
       sma200: Number.isFinite(point.sma200) ? point.sma200 : null,
       sma200Upper: Number.isFinite(point.sma200Upper) ? point.sma200Upper : null,
       sma200Lower: Number.isFinite(point.sma200Lower) ? point.sma200Lower : null,
+      pivotLine: Number.isFinite(point.pivotLine as number) ? point.pivotLine : null,
     }));
   }, [asset]);
 
   const opportunityGradientId = `opportunityGradient-${asset?.id || "unknown"}`;
   const riskGradientId = `riskGradient-${asset?.id || "unknown"}`;
   const brokerLinks = asset ? buildBrokerLinks(asset.symbol) : [];
+  const technicalIndicators = [
+    {
+      label: "Direction du canal",
+      value: asset?.technicalIndicators.channelDirection || "Indisponible",
+    },
+    {
+      label: "Bande Bollinger",
+      value: asset?.technicalIndicators.bollingerBands || "Indisponible",
+    },
+    {
+      label: "Pivot",
+      value: asset?.technicalIndicators.pivot || "Indisponible",
+      colSpan: true,
+    },
+    {
+      label: "Prix moyen",
+      value: asset?.technicalIndicators.sma200 || "Indisponible",
+    },
+    {
+      label: "Nombre de jours consécutifs en zone d'achat",
+      value: asset?.technicalIndicators.timeInBuyZone || "Indisponible",
+    },
+    {
+      label: "RSI",
+      value: asset?.technicalIndicators.rsi || "Indisponible",
+    },
+    {
+      label: "MACD / Signal",
+      value: asset?.technicalIndicators.macd || "Indisponible",
+    },
+  ];
 
   if (isLoading) {
     return (
@@ -852,8 +1039,29 @@ export function AssetDetail() {
                 connectNulls
                 isAnimationActive={false}
               />
+              <Line
+                type="monotone"
+                dataKey="pivotLine"
+                stroke="#58585827"
+                strokeWidth={2}
+                dot={false}
+                connectNulls
+                isAnimationActive={false}
+              />
             </ComposedChart>
           </ResponsiveContainer>
+
+          <div className="mt-4 flex flex-wrap items-center justify-end gap-x-6 gap-y-2 px-1">
+            {(asset.legend || []).map((item) => (
+              <div key={item.label} className="flex items-center gap-2">
+                <div
+                  className="h-[3px] w-8 rounded-full"
+                  style={{ backgroundColor: item.color }}
+                />
+                <span className="text-xs text-gray-500">{item.label}</span>
+              </div>
+            ))}
+          </div>
         </motion.div>
 
         {/* Signal */}
@@ -880,7 +1088,7 @@ export function AssetDetail() {
               <div className="text-sm text-gray-500">{getStatusLabel(asset.status)}</div>
             </div>
             <div className="text-sm font-semibold text-gray-900">
-              Score {asset.score}/100
+              {getOpportunityLabel(asset.status)} : {asset.score}%
             </div>
           </div>
         </motion.div>
@@ -896,45 +1104,78 @@ export function AssetDetail() {
             Indicateurs techniques
           </h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-            {[
-              {
-                label: "Direction du canal",
-                value: asset.technicalIndicators.channelDirection,
-              },
-              {
-                label: "Bande Bollinger",
-                value: asset.technicalIndicators.bollingerBands,
-              },
-              {
-                label: "Support/Résistance",
-                value: asset.technicalIndicators.nearestLevel,
-                colSpan: true,
-              },
-              {
-                label: "RSI",
-                value: asset.technicalIndicators.rsi,
-              },
-              {
-                label: "MACD / Signal",
-                value: asset.technicalIndicators.macd,
-              },
-            ].map((indicator, index) => (
-              <motion.div
-                key={indicator.label}
-                className={`bg-gray-50 rounded-2xl p-4 ${indicator.colSpan ? "col-span-2 sm:col-span-1" : ""}`}
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{
-                  delay: 0.4 + index * 0.05,
-                  duration: 0.3,
-                }}
-                whileHover={{ scale: 1.05 }}
-              >
-                <div className="text-xs text-gray-500 mb-1">{indicator.label}</div>
-                <div className="font-semibold text-gray-900 tracking-tight">{indicator.value}</div>
-              </motion.div>
-            ))}
+            {technicalIndicators.map((indicator, index) => {
+              const help = TECHNICAL_INDICATOR_HELP[indicator.label];
+
+              return (
+                <motion.button
+                  key={indicator.label}
+                  type="button"
+                  onClick={() => help && setOpenIndicatorHelp(indicator.label)}
+                  className={`relative bg-gray-50 rounded-2xl p-4 text-left ${indicator.colSpan ? "col-span-2 sm:col-span-1" : ""}`}
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{
+                    delay: 0.4 + index * 0.05,
+                    duration: 0.3,
+                  }}
+                >
+                  <div className="flex items-start justify-between gap-2 mb-1">
+                    <div className="text-xs text-gray-500">{indicator.label}</div>
+                    {help && (
+                      <span
+                        className="text-gray-400 flex-shrink-0"
+                        aria-label={`Comprendre ${indicator.label}`}
+                      >
+                        <HelpCircle className="w-4 h-4" />
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="font-semibold text-gray-900 tracking-tight">{indicator.value}</div>
+                </motion.button>
+              );
+            })}
           </div>
+
+          {openIndicatorHelp && TECHNICAL_INDICATOR_HELP[openIndicatorHelp] && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-40 flex items-center justify-center bg-black/30 backdrop-blur-sm px-4"
+              onClick={() => setOpenIndicatorHelp(null)}
+            >
+              <motion.div
+                initial={{ opacity: 0, y: 16, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 16, scale: 0.98 }}
+                transition={{ duration: 0.2 }}
+                className="w-full max-w-2xl rounded-3xl border border-gray-200 bg-white p-5 shadow-2xl"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-start justify-between gap-3 mb-3">
+                  <div className="text-lg font-semibold text-gray-900">
+                    {TECHNICAL_INDICATOR_HELP[openIndicatorHelp].title}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setOpenIndicatorHelp(null)}
+                    className="text-gray-400 hover:text-gray-700 transition-colors flex-shrink-0"
+                    aria-label="Fermer l'explication"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+                <p className="text-sm text-gray-600 leading-relaxed mb-3">
+                  {TECHNICAL_INDICATOR_HELP[openIndicatorHelp].description}
+                </p>
+                <p className="text-sm text-gray-900 leading-relaxed font-medium">
+                  {TECHNICAL_INDICATOR_HELP[openIndicatorHelp].insight}
+                </p>
+              </motion.div>
+            </motion.div>
+          )}
         </motion.div>
 
         {/* achet cet actif */}
