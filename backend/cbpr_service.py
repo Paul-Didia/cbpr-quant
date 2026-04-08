@@ -61,6 +61,57 @@ def compute_sma200(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+# Compute SMA200 trend direction
+def compute_sma200_trend_direction(
+    df: pd.DataFrame,
+    symbol: str,
+    asset_name: str = "",
+    exchange: str = "",
+    lookback: int = 20,
+) -> pd.DataFrame:
+    trend_directions: list[str] = []
+
+    base = symbol.split("/")[0].split(":")[-1].upper()
+    crypto = ["BTC", "ETH", "SOL", "ADA", "XRP", "BNB", "DOGE", "DOT"]
+
+    if base in crypto:
+        flat_threshold_pct = 0.005
+    elif "/" in symbol and (exchange or "").lower() == "forex":
+        flat_threshold_pct = 0.002
+    elif is_etf(symbol, asset_name, exchange):
+        flat_threshold_pct = 0.003
+    else:
+        flat_threshold_pct = 0.005
+
+    sma_values = df["SMA200"].tolist()
+
+    for i in range(len(df)):
+        current_sma = sma_values[i]
+
+        if pd.isna(current_sma):
+            trend_directions.append("neutre")
+            continue
+
+        start_index = max(0, i - lookback)
+        start_sma = sma_values[start_index]
+
+        if pd.isna(start_sma) or float(start_sma) == 0:
+            trend_directions.append("neutre")
+            continue
+
+        trend_pct = (float(current_sma) - float(start_sma)) / float(start_sma)
+
+        if trend_pct > flat_threshold_pct:
+            trend_directions.append("haussier")
+        elif trend_pct < -flat_threshold_pct:
+            trend_directions.append("baissier")
+        else:
+            trend_directions.append("neutre")
+
+    df["sma200_trend_direction"] = trend_directions
+    return df
+
+
 # Pivot level computation
 def compute_pivot_levels(df: pd.DataFrame, window: int = 3) -> pd.DataFrame:
     pivot_highs: list[float | None] = [None] * len(df)
@@ -351,6 +402,7 @@ def cbpr_analyze_historical(
     df = compute_bbands(df)
     df = compute_macd(df)
     df = compute_sma200(df)
+    df = compute_sma200_trend_direction(df, symbol=symbol, asset_name=asset_name, exchange=exchange)
     df = compute_pivot_levels(df)
     df = compute_daily_delta(df)
 
@@ -358,7 +410,7 @@ def cbpr_analyze_historical(
     crypto = ["BTC", "ETH", "SOL", "ADA", "XRP", "BNB", "DOGE", "DOT"]
 
     if base in crypto:
-        margin = 0.19
+        margin = 0.15
     elif "/" in symbol and (exchange or "").lower() == "forex":
         margin = 0.02
     elif is_etf(symbol, asset_name, exchange):
@@ -376,15 +428,9 @@ def cbpr_analyze_historical(
             return "neutre"
         return "achat" if row["close"] < row["SMA200"] else "vente"
 
-    def get_channel_direction(row):
-        if pd.isna(row["SMA200"]):
-            return "neutre"
-        if row["SMA200_lower"] <= row["close"] <= row["SMA200_upper"]:
-            return "neutre"
-        return "baissier" if row["close"] < row["SMA200"] else "haussier"
 
     df["direction"] = df.apply(get_signal_direction, axis=1)
-    df["channel_direction"] = df.apply(get_channel_direction, axis=1)
+    df["channel_direction"] = df["sma200_trend_direction"]
 
     # 🆕 Durée passée sous la SMA200 et en zone d'achat, en jours de bourse consécutifs
     df["below_sma200"] = (

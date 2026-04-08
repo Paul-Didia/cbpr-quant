@@ -212,12 +212,12 @@ const TECHNICAL_INDICATOR_HELP: Record<
     insight: string;
   }
 > = {
-  "Direction du canal": {
-    title: "Direction du canal",
+  Tendance: {
+    title: "Tendance",
     description:
-      "Cet indicateur montre dans quel sens évolue le prix par rapport à son canal CBPR autour de la SMA200. Il aide à situer rapidement l’actif dans son contexte global.",
+      "Cet indicateur montre l’orientation générale du marché à partir de l’évolution de la moyenne longue. Il permet de voir si le contexte de fond est plutôt haussier, baissier ou neutre.",
     insight:
-      "Il permet de comprendre le contexte dominant : haussier, baissier ou neutre.",
+      "Il permet de comprendre le sens dominant du marché avant même d’analyser le prix actuel en détail.",
   },
   "Bande Bollinger": {
     title: "Bande Bollinger",
@@ -250,7 +250,7 @@ const TECHNICAL_INDICATOR_HELP: Record<
   "Prix moyen": {
     title: "Prix moyen",
     description:
-      "Le prix moyen sur 200 périodes ou SMA200 est une moyenne mobile longue qui résume la tendance de fond de l’actif. Elle sert de repère central dans la lecture du canal CBPR.",
+      "Le prix moyen sur 200 périodes ou SMA200 est une moyenne mobile longue qui résume la tendance de fond de l’actif. Elle sert de repère central dans la lecture de la tendance.",
     insight:
       "Elle permet de voir rapidement si le prix évolue au-dessus, au-dessous, ou autour de sa tendance longue.",
   },
@@ -484,7 +484,7 @@ function mapToAssetDetail(assetResponse: any, analysisResponse: any, symbol: str
     score,
     chartData,
 
-    // 🆕 Canal SMA200 (contexte CBPR)
+    // 🆕 Tendance SMA200 (contexte CBPR)
     smaChannel: {
       sma200: Number.isFinite(sma200) ? sma200 : null,
       upper: Number.isFinite(sma200) ? sma200 * (1 + getSmaChannelMargin(assetType)) : null,
@@ -493,14 +493,14 @@ function mapToAssetDetail(assetResponse: any, analysisResponse: any, symbol: str
     legend: [
       {
         label: "Prix pivot",
-        color: "#58585827",
+        color: "#8c8c8c27",
       },
       {
         label: "Prix moyen",
         color: "#0055ff61",
       },
       {
-        label: "Canal",
+        label: "Tendance",
         color: "#0055ff",
       },
     ],
@@ -720,7 +720,7 @@ export function AssetDetail() {
   const brokerLinks = asset ? buildBrokerLinks(asset.symbol) : [];
   const technicalIndicators = [
     {
-      label: "Direction du canal",
+      label: "Tendance",
       value: asset?.technicalIndicators.channelDirection || "Indisponible",
     },
     {
@@ -951,6 +951,7 @@ export function AssetDetail() {
 
               <YAxis
                 tick={{ fontSize: 11, fill: "#9ca3af" }}
+                tickFormatter={(value) => Number(value).toFixed(1)}
                 domain={[
                   (dataMin: number) => Math.min(dataMin, asset.smaChannel.lower ?? dataMin),
                   (dataMax: number) => Math.max(dataMax, asset.smaChannel.upper ?? dataMax),
@@ -1033,7 +1034,7 @@ export function AssetDetail() {
               <Line
                 type="monotone"
                 dataKey="pivotLine"
-                stroke="#58585827"
+                stroke="#8c8c8c27"
                 strokeWidth={2}
                 dot={false}
                 connectNulls
