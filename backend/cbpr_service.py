@@ -123,6 +123,223 @@ def is_etf(symbol: str, asset_name: str = "", exchange: str = "") -> bool:
     return False
 
 
+# --- CBPR score and actionable signal logic ---
+
+def _clamp_score(value: float) -> int:
+    return int(max(0, min(100, round(value))))
+
+
+def compute_cbpr_score(row: pd.Series) -> int:
+    direction = row.get("direction", "neutre")
+    close = row.get("close")
+    sma200 = row.get("SMA200")
+    sma200_upper = row.get("SMA200_upper")
+    sma200_lower = row.get("SMA200_lower")
+    rsi = row.get("RSI")
+    macd = row.get("MACD")
+    signal_line = row.get("Signal")
+    delta_pct = row.get("delta_pct")
+    pivot_support = row.get("pivot_support")
+    pivot_resistance = row.get("pivot_resistance")
+    below_days = int(row.get("below_sma200_days", 0) or 0)
+    buy_days = int(row.get("buy_zone_days", 0) or 0)
+
+    if (
+        pd.isna(close)
+        or pd.isna(sma200)
+        or pd.isna(sma200_upper)
+        or pd.isna(sma200_lower)
+    ):
+        return 0
+
+    channel_width = float(sma200_upper) - float(sma200_lower)
+    half_channel = channel_width / 2 if channel_width > 0 else 0.0
+    channel_mid = (float(sma200_upper) + float(sma200_lower)) / 2
+
+    if direction == "neutre":
+        score = 0.0
+
+        if half_channel > 0:
+            distance_to_mid = abs(float(close) - channel_mid)
+            center_ratio = max(0.0, 1.0 - (distance_to_mid / half_channel))
+            score += center_ratio * 40
+        else:
+            score += 20
+
+        if pd.notna(rsi):
+            rsi_distance = abs(float(rsi) - 50.0)
+            rsi_ratio = max(0.0, 1.0 - (rsi_distance / 20.0))
+            score += rsi_ratio * 20
+
+        if pd.notna(macd) and pd.notna(signal_line):
+            macd_gap = abs(float(macd) - float(signal_line))
+            macd_scale = max(abs(float(close)) * 0.01, 1e-6)
+            macd_ratio = max(0.0, 1.0 - (macd_gap / macd_scale))
+            score += macd_ratio * 20
+
+        if pd.notna(delta_pct):
+            daily_move_ratio = max(0.0, 1.0 - min(abs(float(delta_pct)) / 0.03, 1.0))
+            score += daily_move_ratio * 10
+
+        nearest_pivot_distance = None
+        if pd.notna(pivot_support):
+            nearest_pivot_distance = abs(float(close) - float(pivot_support)) / float(close)
+        if pd.notna(pivot_resistance):
+            resistance_distance = abs(float(pivot_resistance) - float(close)) / float(close)
+            if nearest_pivot_distance is None or resistance_distance < nearest_pivot_distance:
+                nearest_pivot_distance = resistance_distance
+
+        if nearest_pivot_distance is None:
+            score += 10
+        else:
+            pivot_neutral_ratio = min(nearest_pivot_distance / 0.05, 1.0)
+            score += pivot_neutral_ratio * 10
+
+        return _clamp_score(score)
+
+    score = 0.0
+
+    outside_distance = 0.0
+    outside_reference = max(channel_width * 0.5, abs(float(close)) * 0.02, 1e-6)
+
+    if direction == "achat":
+        outside_distance = max(0.0, float(sma200_lower) - float(close))
+    elif direction == "vente":
+        outside_distance = max(0.0, float(close) - float(sma200_upper))
+
+    outside_ratio = min(outside_distance / outside_reference, 1.0)
+    score += outside_ratio * 35
+
+    if pd.notna(rsi):
+        if direction == "achat":
+            if float(rsi) <= 30:
+                score += 20
+            elif float(rsi) <= 40:
+                score += 12
+            elif float(rsi) <= 50:
+                score += 5
+        elif direction == "vente":
+            if float(rsi) >= 70:
+                score += 20
+            elif float(rsi) >= 60:
+                score += 12
+            elif float(rsi) >= 50:
+                score += 5
+
+    if pd.notna(macd) and pd.notna(signal_line):
+        if direction == "achat":
+            if float(macd) > float(signal_line):
+                score += 20
+            else:
+                score += 5
+        elif direction == "vente":
+            if float(macd) < float(signal_line):
+                score += 20
+            else:
+                score += 5
+
+    if pd.notna(delta_pct):
+        if direction == "achat":
+            if float(delta_pct) < 0:
+                score += 10
+            elif float(delta_pct) < 0.01:
+                score += 4
+        elif direction == "vente":
+            if float(delta_pct) > 0:
+                score += 10
+            elif float(delta_pct) > -0.01:
+                score += 4
+
+    pivot_adjustment = 0.0
+    if direction == "achat" and pd.notna(pivot_support):
+        support_distance_pct = abs(float(close) - float(pivot_support)) / float(close)
+        if float(pivot_support) <= float(close):
+            if support_distance_pct <= 0.015:
+                pivot_adjustment += 15
+            elif support_distance_pct <= 0.03:
+                pivot_adjustment += 8
+            elif support_distance_pct > 0.05:
+                pivot_adjustment -= 10
+
+    if direction == "achat" and pd.notna(pivot_resistance):
+        resistance_distance_pct = abs(float(pivot_resistance) - float(close)) / float(close)
+        if float(pivot_resistance) >= float(close) and resistance_distance_pct <= 0.02:
+            pivot_adjustment -= 20
+
+    if direction == "vente" and pd.notna(pivot_resistance):
+        resistance_distance_pct = abs(float(pivot_resistance) - float(close)) / float(close)
+        if float(pivot_resistance) >= float(close):
+            if resistance_distance_pct <= 0.015:
+                pivot_adjustment += 15
+            elif resistance_distance_pct <= 0.03:
+                pivot_adjustment += 8
+            elif resistance_distance_pct > 0.05:
+                pivot_adjustment -= 10
+
+    if direction == "vente" and pd.notna(pivot_support):
+        support_distance_pct = abs(float(close) - float(pivot_support)) / float(close)
+        if float(pivot_support) <= float(close) and support_distance_pct <= 0.02:
+            pivot_adjustment -= 20
+
+    score += pivot_adjustment
+
+    if direction == "achat":
+        recovery_started = (
+            pd.notna(macd)
+            and pd.notna(signal_line)
+            and pd.notna(rsi)
+            and float(macd) > float(signal_line)
+            and float(rsi) >= 45
+        )
+
+        if below_days >= 20:
+            score -= 10
+        if below_days >= 35:
+            score -= 10
+        if below_days >= 50:
+            score -= 15
+
+        if buy_days >= 20 and not recovery_started:
+            score -= 10
+        if buy_days >= 35 and not recovery_started:
+            score -= 10
+        if buy_days >= 50 and not recovery_started:
+            score -= 15
+
+    return _clamp_score(score)
+
+
+def is_cbpr_signal_actionable(row: pd.Series) -> bool:
+    direction = row.get("direction", "neutre")
+    if direction == "neutre":
+        return False
+
+    delta_pct = row.get("delta_pct")
+    if pd.notna(delta_pct):
+        if direction == "vente" and float(delta_pct) <= 0:
+            return False
+        if direction == "achat" and float(delta_pct) >= 0:
+            return False
+
+    if direction == "achat":
+        below_days = int(row.get("below_sma200_days", 0) or 0)
+        buy_days = int(row.get("buy_zone_days", 0) or 0)
+        macd = row.get("MACD")
+        signal_line = row.get("Signal")
+        rsi = row.get("RSI")
+        recovery_started = (
+            pd.notna(macd)
+            and pd.notna(signal_line)
+            and pd.notna(rsi)
+            and float(macd) > float(signal_line)
+            and float(rsi) >= 45
+        )
+        if (below_days >= 50 or buy_days >= 50) and not recovery_started:
+            return False
+
+    return True
+
+
 def cbpr_analyze_historical(
     df_4h: pd.DataFrame,
     symbol: str,
@@ -213,102 +430,10 @@ def cbpr_analyze_historical(
         if row["direction"] == "neutre":
             continue
 
-        score = 75
+        score = compute_cbpr_score(row)
 
-        if row["direction"] == "achat" and row["RSI"] < 30:
-            score += 15
-        if row["direction"] == "vente" and row["RSI"] > 70:
-            score += 15
-
-        if row["direction"] == "achat" and row["MACD"] > row["Signal"]:
-            score += 15
-        if row["direction"] == "vente" and row["MACD"] < row["Signal"]:
-            score += 15
-
-        # 🆕 Dégradation d'un achat qui dure trop longtemps dans un canal baissier sans reprise
-        if row["direction"] == "achat":
-            duration_penalty = 0
-            below_days = int(row.get("below_sma200_days", 0) or 0)
-            buy_days = int(row.get("buy_zone_days", 0) or 0)
-            recovery_started = (
-                pd.notna(row["MACD"])
-                and pd.notna(row["Signal"])
-                and pd.notna(row["RSI"])
-                and row["MACD"] > row["Signal"]
-                and row["RSI"] >= 45
-            )
-
-            if below_days >= 20:
-                duration_penalty += 10
-            if below_days >= 35:
-                duration_penalty += 10
-            if below_days >= 50:
-                duration_penalty += 15
-
-            if buy_days >= 20 and not recovery_started:
-                duration_penalty += 10
-            if buy_days >= 35 and not recovery_started:
-                duration_penalty += 10
-            if buy_days >= 50 and not recovery_started:
-                duration_penalty += 15
-
-            score -= duration_penalty
-
-        # 🆕 Pondération du score par proximité avec un vrai pivot
-        pivot_support = row.get("pivot_support")
-        pivot_resistance = row.get("pivot_resistance")
-        pivot_adjustment = 0
-
-        if row["direction"] == "achat" and pd.notna(pivot_support):
-            support_distance_pct = abs(float(row["close"]) - float(pivot_support)) / float(row["close"])
-            if float(pivot_support) <= float(row["close"]):
-                if support_distance_pct <= 0.015:
-                    pivot_adjustment += 15
-                elif support_distance_pct <= 0.03:
-                    pivot_adjustment += 8
-                elif support_distance_pct > 0.05:
-                    pivot_adjustment -= 10
-
-        if row["direction"] == "achat" and pd.notna(pivot_resistance):
-            resistance_distance_pct = abs(float(pivot_resistance) - float(row["close"])) / float(row["close"])
-            if float(pivot_resistance) >= float(row["close"]) and resistance_distance_pct <= 0.02:
-                pivot_adjustment -= 20
-
-        if row["direction"] == "vente" and pd.notna(pivot_resistance):
-            resistance_distance_pct = abs(float(pivot_resistance) - float(row["close"])) / float(row["close"])
-            if float(pivot_resistance) >= float(row["close"]):
-                if resistance_distance_pct <= 0.015:
-                    pivot_adjustment += 15
-                elif resistance_distance_pct <= 0.03:
-                    pivot_adjustment += 8
-                elif resistance_distance_pct > 0.05:
-                    pivot_adjustment -= 10
-
-        if row["direction"] == "vente" and pd.notna(pivot_support):
-            support_distance_pct = abs(float(row["close"]) - float(pivot_support)) / float(row["close"])
-            if float(pivot_support) <= float(row["close"]) and support_distance_pct <= 0.02:
-                pivot_adjustment -= 20
-
-        score += pivot_adjustment
-
-        if row["direction"] == "vente" and row["delta_pct"] <= 0:
+        if not is_cbpr_signal_actionable(row):
             continue
-        if row["direction"] == "achat" and row["delta_pct"] >= 0:
-            continue
-
-        # 🆕 Si un achat reste trop longtemps faible sans reprise, on ne le qualifie plus comme opportunité forte
-        if row["direction"] == "achat":
-            below_days = int(row.get("below_sma200_days", 0) or 0)
-            buy_days = int(row.get("buy_zone_days", 0) or 0)
-            recovery_started = (
-                pd.notna(row["MACD"])
-                and pd.notna(row["Signal"])
-                and pd.notna(row["RSI"])
-                and row["MACD"] > row["Signal"]
-                and row["RSI"] >= 45
-            )
-            if (below_days >= 50 or buy_days >= 50) and not recovery_started:
-                continue
 
         signals.append(
             {
@@ -357,113 +482,12 @@ def analyze_cbpr(
 
     last_signal = signals[-1] if signals else None
 
-    # 🆕 Le statut principal doit refléter la bougie actuelle, pas le dernier signal historique
+    # 🆕 Le statut principal doit toujours être calculé à partir des indicateurs de la bougie actuelle
+    score = compute_cbpr_score(latest)
     signal = "NEUTRE"
-    score = 60
 
-    if latest["direction"] != "neutre":
-        current_score = 75
-
-        if pd.notna(latest["RSI"]):
-            if latest["direction"] == "achat" and latest["RSI"] < 30:
-                current_score += 15
-            if latest["direction"] == "vente" and latest["RSI"] > 70:
-                current_score += 15
-
-        if pd.notna(latest["MACD"]) and pd.notna(latest["Signal"]):
-            if latest["direction"] == "achat" and latest["MACD"] > latest["Signal"]:
-                current_score += 15
-            if latest["direction"] == "vente" and latest["MACD"] < latest["Signal"]:
-                current_score += 15
-
-        if latest["direction"] == "achat":
-            duration_penalty = 0
-            below_days = int(latest.get("below_sma200_days", 0) or 0)
-            buy_days = int(latest.get("buy_zone_days", 0) or 0)
-            recovery_started = (
-                pd.notna(latest["MACD"])
-                and pd.notna(latest["Signal"])
-                and pd.notna(latest["RSI"])
-                and latest["MACD"] > latest["Signal"]
-                and latest["RSI"] >= 45
-            )
-
-            if below_days >= 20:
-                duration_penalty += 10
-            if below_days >= 35:
-                duration_penalty += 10
-            if below_days >= 50:
-                duration_penalty += 15
-
-            if buy_days >= 20 and not recovery_started:
-                duration_penalty += 10
-            if buy_days >= 35 and not recovery_started:
-                duration_penalty += 10
-            if buy_days >= 50 and not recovery_started:
-                duration_penalty += 15
-
-            current_score -= duration_penalty
-
-        pivot_support = latest.get("pivot_support")
-        pivot_resistance = latest.get("pivot_resistance")
-        pivot_adjustment = 0
-
-        if latest["direction"] == "achat" and pd.notna(pivot_support):
-            support_distance_pct = abs(float(latest["close"]) - float(pivot_support)) / float(latest["close"])
-            if float(pivot_support) <= float(latest["close"]):
-                if support_distance_pct <= 0.015:
-                    pivot_adjustment += 15
-                elif support_distance_pct <= 0.03:
-                    pivot_adjustment += 8
-                elif support_distance_pct > 0.05:
-                    pivot_adjustment -= 10
-
-        if latest["direction"] == "achat" and pd.notna(pivot_resistance):
-            resistance_distance_pct = abs(float(pivot_resistance) - float(latest["close"])) / float(latest["close"])
-            if float(pivot_resistance) >= float(latest["close"]) and resistance_distance_pct <= 0.02:
-                pivot_adjustment -= 20
-
-        if latest["direction"] == "vente" and pd.notna(pivot_resistance):
-            resistance_distance_pct = abs(float(pivot_resistance) - float(latest["close"])) / float(latest["close"])
-            if float(pivot_resistance) >= float(latest["close"]):
-                if resistance_distance_pct <= 0.015:
-                    pivot_adjustment += 15
-                elif resistance_distance_pct <= 0.03:
-                    pivot_adjustment += 8
-                elif resistance_distance_pct > 0.05:
-                    pivot_adjustment -= 10
-
-        if latest["direction"] == "vente" and pd.notna(pivot_support):
-            support_distance_pct = abs(float(latest["close"]) - float(pivot_support)) / float(latest["close"])
-            if float(pivot_support) <= float(latest["close"]) and support_distance_pct <= 0.02:
-                pivot_adjustment -= 20
-
-        current_score += pivot_adjustment
-
-        current_score = max(0, min(100, current_score))
-        current_is_valid = True
-
-        if latest["direction"] == "vente" and latest["delta_pct"] <= 0:
-            current_is_valid = False
-        if latest["direction"] == "achat" and latest["delta_pct"] >= 0:
-            current_is_valid = False
-
-        if latest["direction"] == "achat":
-            below_days = int(latest.get("below_sma200_days", 0) or 0)
-            buy_days = int(latest.get("buy_zone_days", 0) or 0)
-            recovery_started = (
-                pd.notna(latest["MACD"])
-                and pd.notna(latest["Signal"])
-                and pd.notna(latest["RSI"])
-                and latest["MACD"] > latest["Signal"]
-                and latest["RSI"] >= 45
-            )
-            if (below_days >= 50 or buy_days >= 50) and not recovery_started:
-                current_is_valid = False
-
-        if current_is_valid:
-            signal = "ACHAT" if latest["direction"] == "achat" else "VENTE"
-            score = int(current_score)
+    if latest["direction"] != "neutre" and is_cbpr_signal_actionable(latest):
+        signal = "ACHAT" if latest["direction"] == "achat" else "VENTE"
 
     if pd.isna(latest.get("BB_upper")) or pd.isna(latest.get("BB_lower")):
         bollinger_zone = "Indisponible"

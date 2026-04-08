@@ -203,18 +203,6 @@ function getStatusLabel(status: AssetDetailData["status"]) {
   }
 }
 
-function getOpportunityLabel(status: AssetDetailData["status"]) {
-  switch (status) {
-    case "opportunity":
-      return "Niveau d’opportunité";
-    case "risk":
-      return "Niveau de risque";
-    case "neutral":
-      return "Niveau de neutralité";
-    default:
-      return "Niveau du contexte";
-  }
-}
 
 const TECHNICAL_INDICATOR_HELP: Record<
   string,
@@ -330,10 +318,13 @@ function buildDescription(name: string, symbol: string, assetType: AssetType, ex
 }
 
 function buildNewsPlaceholders(symbol: string, signal: string, score: number) {
+  const displayedScore = Math.max(10, Number(score || 0));
+  const scoreSuffix = Number(score || 0) <= 10 ? " min" : "";
+
   return [
     {
       id: `${symbol}-signal`,
-      title: `Score CBPR : ${score}.`,
+      title: `Score CBPR : ${displayedScore}/100${scoreSuffix}.`,
     },
     {
       id: `${symbol}-analysis`,
@@ -1086,9 +1077,6 @@ export function AssetDetail() {
                   }`}
               />
               <div className="text-sm text-gray-500">{getStatusLabel(asset.status)}</div>
-            </div>
-            <div className="text-sm font-semibold text-gray-900">
-              {getOpportunityLabel(asset.status)} : {asset.score}%
             </div>
           </div>
         </motion.div>
