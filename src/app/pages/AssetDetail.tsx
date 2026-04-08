@@ -241,7 +241,7 @@ const TECHNICAL_INDICATOR_HELP: Record<
   "Pivot": {
     title: "Pivot",
     description:
-      "Le pivot est un niveau horizontal réel de marché, issu d’un dernier creux ou sommet significatif. Il sert de point d’appui ou de rejet dans la lecture CBPR.",
+      "Le pivot est un niveau de prix clé sur lequel le marché a déjà réagi. Il correspond souvent à une zone où les acheteurs ou les vendeurs se sont manifestés, ce qui en fait un point important à surveiller.",
     insight:
       "Il permet de voir si le prix actuel se rapproche d’un niveau de réaction concret, utile pour confirmer ou affaiblir le signal.",
   },
