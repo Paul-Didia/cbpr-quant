@@ -61,13 +61,13 @@ def compute_sma200(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-# Compute SMA200 trend direction
+
 def compute_sma200_trend_direction(
     df: pd.DataFrame,
     symbol: str,
     asset_name: str = "",
     exchange: str = "",
-    lookback: int = 20,
+    lookback: int = 120,
 ) -> pd.DataFrame:
     trend_directions: list[str] = []
 
@@ -83,27 +83,40 @@ def compute_sma200_trend_direction(
     else:
         flat_threshold_pct = 0.005
 
-    sma_values = df["SMA200"].tolist()
+    sma_series = df["SMA200"]
 
     for i in range(len(df)):
-        current_sma = sma_values[i]
+        current_sma = sma_series.iloc[i]
 
         if pd.isna(current_sma):
             trend_directions.append("neutre")
             continue
 
         start_index = max(0, i - lookback)
-        start_sma = sma_values[start_index]
+        sma_window = sma_series.iloc[start_index : i + 1].dropna()
 
-        if pd.isna(start_sma) or float(start_sma) == 0:
+        if len(sma_window) < 2:
             trend_directions.append("neutre")
             continue
 
-        trend_pct = (float(current_sma) - float(start_sma)) / float(start_sma)
+        y = sma_window.to_numpy(dtype=float)
+        x = np.arange(len(y), dtype=float)
 
-        if trend_pct > flat_threshold_pct:
+        slope = np.polyfit(x, y, 1)[0]
+        mean_sma = float(np.mean(y))
+
+        if mean_sma == 0:
+            trend_directions.append("neutre")
+            continue
+
+        # On convertit la pente par bougie en variation totale estimée sur toute la fenêtre.
+        # Sinon la pente brute reste trop petite et classe trop souvent la tendance en neutre.
+        estimated_total_move = slope * max(len(y) - 1, 1)
+        slope_pct = estimated_total_move / mean_sma
+
+        if slope_pct > flat_threshold_pct:
             trend_directions.append("haussier")
-        elif trend_pct < -flat_threshold_pct:
+        elif slope_pct < -flat_threshold_pct:
             trend_directions.append("baissier")
         else:
             trend_directions.append("neutre")
@@ -306,31 +319,31 @@ def compute_cbpr_score(row: pd.Series) -> int:
         support_distance_pct = abs(float(close) - float(pivot_support)) / float(close)
         if float(pivot_support) <= float(close):
             if support_distance_pct <= 0.015:
-                pivot_adjustment += 15
-            elif support_distance_pct <= 0.03:
                 pivot_adjustment += 8
+            elif support_distance_pct <= 0.03:
+                pivot_adjustment += 4
             elif support_distance_pct > 0.05:
-                pivot_adjustment -= 10
+                pivot_adjustment -= 4
 
     if direction == "achat" and pd.notna(pivot_resistance):
         resistance_distance_pct = abs(float(pivot_resistance) - float(close)) / float(close)
         if float(pivot_resistance) >= float(close) and resistance_distance_pct <= 0.02:
-            pivot_adjustment -= 20
+            pivot_adjustment -= 8
 
     if direction == "vente" and pd.notna(pivot_resistance):
         resistance_distance_pct = abs(float(pivot_resistance) - float(close)) / float(close)
         if float(pivot_resistance) >= float(close):
             if resistance_distance_pct <= 0.015:
-                pivot_adjustment += 15
-            elif resistance_distance_pct <= 0.03:
                 pivot_adjustment += 8
+            elif resistance_distance_pct <= 0.03:
+                pivot_adjustment += 4
             elif resistance_distance_pct > 0.05:
-                pivot_adjustment -= 10
+                pivot_adjustment -= 4
 
     if direction == "vente" and pd.notna(pivot_support):
         support_distance_pct = abs(float(close) - float(pivot_support)) / float(close)
         if float(pivot_support) <= float(close) and support_distance_pct <= 0.02:
-            pivot_adjustment -= 20
+            pivot_adjustment -= 8
 
     score += pivot_adjustment
 
