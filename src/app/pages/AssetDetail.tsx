@@ -81,6 +81,35 @@ type AssetDetailData = {
 
 type UserPlan = "free" | "pro" | "quant";
 
+const HOME_ASSET_CACHE_PREFIX = "cbpr_home_asset_";
+
+function getHomeAssetCacheKey(symbol: string) {
+  return `${HOME_ASSET_CACHE_PREFIX}${encodeURIComponent(symbol)}`;
+}
+
+function setCachedHomeAsset(
+  symbol: string,
+  data: {
+    id: string;
+    symbol: string;
+    name: string;
+    logo: string;
+    assetType: AssetType;
+    currentPrice: number;
+    status: "opportunity" | "risk" | "neutral";
+  },
+) {
+  try {
+    window.localStorage.setItem(
+      getHomeAssetCacheKey(symbol),
+      JSON.stringify({
+        data,
+        timestamp: Date.now(),
+      }),
+    );
+  } catch {}
+}
+
 const FREE_STOCK_SYMBOLS = new Set([
   "AAPL", "MSFT", "AMZN", "GOOGL", "META", "NVDA", "TSLA", "JPM", "JNJ", "V",
   "WMT", "PG", "XOM", "UNH", "KO", "DIS", "NFLX", "INTC", "AMD", "CSCO",
@@ -452,6 +481,18 @@ function openBrokerLink(webUrl: string, appUrl?: string | null) {
   window.open(webUrl, "_blank", "noopener,noreferrer");
 }
 
+function mapToHomeAssetCache(asset: AssetDetailData) {
+  return {
+    id: asset.id,
+    symbol: asset.symbol,
+    name: asset.name,
+    logo: asset.logo || "",
+    assetType: asset.assetType,
+    currentPrice: asset.currentPrice,
+    status: asset.status,
+  };
+}
+
 function mapToAssetDetail(assetResponse: any, analysisResponse: any, symbol: string): AssetDetailData {
   const quote = assetResponse?.quote || {};
   const analysis = analysisResponse?.analysis || {};
@@ -678,6 +719,10 @@ export function AssetDetail() {
 
         if (!isCancelled) {
           setAsset(mapped);
+
+          if (isFavorite(mapped.id)) {
+            setCachedHomeAsset(mapped.symbol, mapToHomeAssetCache(mapped));
+          }
         }
       } catch (error) {
         console.error("Error loading asset detail:", error);
@@ -697,7 +742,7 @@ export function AssetDetail() {
     return () => {
       isCancelled = true;
     };
-  }, [symbol, currentPlan]);
+  }, [symbol, currentPlan, isFavorite]);
 
   const toggleWatchlist = async () => {
     if (!asset) return;
