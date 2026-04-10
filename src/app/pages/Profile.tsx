@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, User, Mail, Bell, Crown, Zap, MessageCircle, TrendingUp, Check, X, LogOut } from 'lucide-react';
 import { motion } from 'motion/react';
 import { PageTransition } from '../components/PageTransition';
+import { CbprMethode } from '../components/CbprMethode';
 import { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -12,6 +13,7 @@ export function Profile() {
   const [pendingPlan, setPendingPlan] = useState<'free' | 'pro' | 'quant' | null>(null);
   const [isUpdatingPlan, setIsUpdatingPlan] = useState(false);
   const [subscriptionMessage, setSubscriptionMessage] = useState('');
+  const [openCbprMethod, setOpenCbprMethod] = useState(false);
   const displayedPlan = pendingPlan ?? currentPlan;
 
 
@@ -481,6 +483,35 @@ export function Profile() {
           </div>
         </motion.div>
 
+        <motion.div
+          className="bg-white rounded-3xl p-6 mb-6 shadow-sm border border-gray-100"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.45, duration: 0.5 }}
+          whileHover={{ boxShadow: '0 10px 25px -5px rgb(0 0 0 / 0.1)' }}
+        >
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 className="font-semibold text-gray-900 text-lg tracking-tight mb-2">
+                Comprendre la méthode CBPR
+              </h2>
+              <p className="text-sm text-gray-600 leading-relaxed">
+                Découvrez simplement comment CBPR lit le prix, la tendance, les excès et les zones de réaction du marché.
+              </p>
+            </div>
+          </div>
+
+          <motion.button
+            type="button"
+            className="mt-4 w-full bg-gray-900 text-white py-3 rounded-2xl font-medium"
+            whileHover={{ scale: 1.01 }}
+            whileTap={{ scale: 0.99 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 17 }}
+            onClick={() => setOpenCbprMethod(true)}
+          >
+            Ouvrir l’explication CBPR
+          </motion.button>
+        </motion.div>
         {/* Settings */}
         <motion.div 
           className="bg-white rounded-3xl p-6 mb-6 shadow-sm border border-gray-100"
@@ -537,6 +568,7 @@ export function Profile() {
           <LogOut className="w-5 h-5" />
           Se déconnecter
         </motion.button>
+        <CbprMethode isOpen={openCbprMethod} onClose={() => setOpenCbprMethod(false)} />
       </div>
     </PageTransition>
   );

@@ -3,6 +3,7 @@ import { ArrowLeft, ExternalLink, HelpCircle, Star, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "motion/react";
 import { PageTransition } from "../components/PageTransition";
+import { CbprMethode } from "../components/CbprMethode";
 import { AssetIcon } from "../components/AssetIcon";
 import { useFavorites } from "../contexts/FavoritesContext";
 import { useAuth } from "../contexts/AuthContext";
@@ -70,27 +71,33 @@ type AssetDetailData = {
     id: string;
     title: string;
   }>;
+  explanation: {
+    title: string;
+    summary: string;
+    reasons: string[];
+    scoreLabel: string;
+  };
 };
 
 type UserPlan = "free" | "pro" | "quant";
 
 const FREE_STOCK_SYMBOLS = new Set([
-  "AAPL","MSFT","AMZN","GOOGL","META","NVDA","TSLA","JPM","JNJ","V",
-  "WMT","PG","XOM","UNH","KO","DIS","NFLX","INTC","AMD","CSCO",
-  "ORCL","IBM","BA","NKE","PFE","MRK","CVX","MCD","COST","PEP",
-  "ABT","AVGO","TMO","ACN","QCOM","TXN","HON","LIN","UPS","PM",
-  "RTX","LOW","INTU","AMGN","SPGI","CAT","GS","DE","BLK","MDT",
-  "ISRG","NOW","BKNG","ADBE","PLD","SYK","GILD","ADI","VRTX","ZTS",
-  "CB","CI","MO","LMT","SCHW","DUK","MMC","SO","USB","BDX",
-  "FIS","PNC","T","APD","CSX","NSC","ICE","GM","F","ETN",
-  "EMR","EOG","MPC","PSX","KMI","SLB","COP","HAL","DVN","OXY",
-  "AIG","MET","PRU","ALL","TRV","AXP","COF","DFS","PYPL","SQ",
-  "CRM","SNOW","SHOP","UBER","LYFT","TWLO","DDOG","NET","OKTA","ZS",
-  "CRWD","PANW","FTNT","TEAM","WDAY","DOCU","ROKU","TTD","SPOT","EA",
-  "ATVI","TTWO","RBLX","U","PLTR","AI","SMCI","MRVL","KLAC","LRCX",
-  "ASML","NXPI","ON","MPWR","SWKS","QRVO","CDNS","SNPS","ANSS","PAYC",
-  "PAYX","ADP","HPQ","DELL","HPE","SONY","NTDOY","BABA","JD",
-  "PDD","TCEHY","BIDU","SE","MELI","TSM","INFY","SAP","ORAN","VOD"
+  "AAPL", "MSFT", "AMZN", "GOOGL", "META", "NVDA", "TSLA", "JPM", "JNJ", "V",
+  "WMT", "PG", "XOM", "UNH", "KO", "DIS", "NFLX", "INTC", "AMD", "CSCO",
+  "ORCL", "IBM", "BA", "NKE", "PFE", "MRK", "CVX", "MCD", "COST", "PEP",
+  "ABT", "AVGO", "TMO", "ACN", "QCOM", "TXN", "HON", "LIN", "UPS", "PM",
+  "RTX", "LOW", "INTU", "AMGN", "SPGI", "CAT", "GS", "DE", "BLK", "MDT",
+  "ISRG", "NOW", "BKNG", "ADBE", "PLD", "SYK", "GILD", "ADI", "VRTX", "ZTS",
+  "CB", "CI", "MO", "LMT", "SCHW", "DUK", "MMC", "SO", "USB", "BDX",
+  "FIS", "PNC", "T", "APD", "CSX", "NSC", "ICE", "GM", "F", "ETN",
+  "EMR", "EOG", "MPC", "PSX", "KMI", "SLB", "COP", "HAL", "DVN", "OXY",
+  "AIG", "MET", "PRU", "ALL", "TRV", "AXP", "COF", "DFS", "PYPL", "SQ",
+  "CRM", "SNOW", "SHOP", "UBER", "LYFT", "TWLO", "DDOG", "NET", "OKTA", "ZS",
+  "CRWD", "PANW", "FTNT", "TEAM", "WDAY", "DOCU", "ROKU", "TTD", "SPOT", "EA",
+  "ATVI", "TTWO", "RBLX", "U", "PLTR", "AI", "SMCI", "MRVL", "KLAC", "LRCX",
+  "ASML", "NXPI", "ON", "MPWR", "SWKS", "QRVO", "CDNS", "SNPS", "ANSS", "PAYC",
+  "PAYX", "ADP", "HPQ", "DELL", "HPE", "SONY", "NTDOY", "BABA", "JD",
+  "PDD", "TCEHY", "BIDU", "SE", "MELI", "TSM", "INFY", "SAP", "ORAN", "VOD"
 ]);
 
 function normalizeAccessSymbol(symbol?: string) {
@@ -210,14 +217,17 @@ const TECHNICAL_INDICATOR_HELP: Record<
     title: string;
     description: string;
     insight: string;
+    courbe: string;
   }
 > = {
   Tendance: {
     title: "Tendance",
     description:
-      "Cet indicateur montre l’orientation générale du marché à partir de l’évolution de la moyenne longue. Il permet de voir si le contexte de fond est plutôt haussier, baissier ou neutre.",
+      "La tendance est représentée par le canal bleu foncé autour du prix. Il montre l’orientation générale du marché sur la durée.",
     insight:
-      "Il permet de comprendre le sens dominant du marché avant même d’analyser le prix actuel en détail.",
+      "Ce canal bleu permet de visualiser si le marché évolue dans une dynamique haussière, baissière ou neutre.",
+    courbe:
+      "Courbes : bleu foncé (canal autour du prix)",
   },
   "Bande Bollinger": {
     title: "Bande Bollinger",
@@ -225,13 +235,17 @@ const TECHNICAL_INDICATOR_HELP: Record<
       "Les bandes de Bollinger mesurent l’écart du prix autour de sa moyenne récente. Elles servent à repérer les phases de tension, d’excès ou d’accalmie.",
     insight:
       "Elles permettent de lire la volatilité de l’actif et de voir si le prix est dans une zone d’extension ou de retour à l’équilibre.",
+    courbe:
+      "",
   },
   "Pivot": {
     title: "Pivot",
     description:
-      "Le pivot est un niveau de prix clé sur lequel le marché a déjà réagi. Il correspond souvent à une zone où les acheteurs ou les vendeurs se sont manifestés, ce qui en fait un point important à surveiller.",
+      "Le pivot correspond à une ligne horizontale grise sur le graphique. C’est un niveau de prix clé où le marché a déjà réagi dans le passé.",
     insight:
-      "Il permet de voir si le prix actuel se rapproche d’un niveau de réaction concret, utile pour confirmer ou affaiblir le signal.",
+      "Cette ligne grise permet de visualiser immédiatement les zones où le prix pourrait réagir à nouveau.",
+    courbe:
+      "Ligne horizontale : gris",
   },
   RSI: {
     title: "RSI",
@@ -239,6 +253,8 @@ const TECHNICAL_INDICATOR_HELP: Record<
       "Le RSI mesure le rythme et l’intensité du mouvement récent du prix. Il sert à repérer les excès haussiers ou baissiers.",
     insight:
       "Il permet de voir si le mouvement actuel semble trop fort, trop faible, ou déjà excessif.",
+    courbe:
+      "",
   },
   "MACD / Signal": {
     title: "MACD / Signal",
@@ -246,13 +262,17 @@ const TECHNICAL_INDICATOR_HELP: Record<
       "Le MACD compare plusieurs moyennes pour lire l’élan du marché. La ligne Signal sert de repère pour détecter un changement de dynamique.",
     insight:
       "Il permet de comprendre si la dynamique gagne en force, ralentit, ou commence à se retourner.",
+    courbe:
+      "",
   },
   "Prix moyen": {
     title: "Prix moyen",
     description:
-      "Le prix moyen sur 200 périodes ou SMA200 est une moyenne mobile longue qui résume la tendance de fond de l’actif. Elle sert de repère central dans la lecture de la tendance.",
+      "Le prix moyen sur 200 périodes (SMA200) est représenté par la courbe bleu clair sur le graphique. Elle sert de repère central pour visualiser la tendance de fond de l’actif.",
     insight:
-      "Elle permet de voir rapidement si le prix évolue au-dessus, au-dessous, ou autour de sa tendance longue.",
+      "Lorsque le prix évolue au-dessus ou en dessous de cette courbe bleu clair, cela permet d’identifier rapidement le contexte de tendance globale.",
+    courbe:
+      "Courbe : bleu clair (Prix moyen sur 200 périodes)",
   },
   "Nombre de jours consécutifs en zone d'achat": {
     title: "Nombre de jours consécutifs en zone d'achat",
@@ -260,6 +280,8 @@ const TECHNICAL_INDICATOR_HELP: Record<
       "Cet indicateur mesure depuis combien de jours l’actif reste dans la zone d’achat CBPR sans réelle reprise. Une durée trop longue affaiblit la qualité de l’opportunité.",
     insight:
       "Il permet de repérer quand une opportunité théorique commence à ressembler davantage à un risque persistant.",
+    courbe:
+      "",
   },
 };
 
@@ -317,6 +339,7 @@ function buildDescription(name: string, symbol: string, assetType: AssetType, ex
   return `${name} (${symbol}) est actuellement suivi dans CBPR Quant comme ${assetTypeLabel}. Les données de marché sont récupérées en temps réel H4 et l'analyse affichée combine le prix actuel, la dynamique récente et les principaux indicateurs techniques du moteur CBPR. Marché de référence : ${exchange || "non renseigné"}.`;
 }
 
+
 function buildNewsPlaceholders(symbol: string, signal: string, score: number) {
   const displayedScore = Math.max(10, Number(score || 0));
   const scoreSuffix = Number(score || 0) <= 10 ? " min" : "";
@@ -326,15 +349,50 @@ function buildNewsPlaceholders(symbol: string, signal: string, score: number) {
       id: `${symbol}-signal`,
       title: `Score CBPR : ${displayedScore}/100${scoreSuffix}.`,
     },
-    {
-      id: `${symbol}-analysis`,
-      title: `Analyse mise à jour automatiquement au chargement de la fiche actif.`,
-    },
-    {
-      id: `${symbol}-watchlist`,
-      title: `Ajoutez ${symbol} aux favoris pour le suivre depuis votre watchlist CBPR.`,
-    },
   ];
+}
+
+function buildElasticScoreSentence(
+  score: number,
+  status: AssetDetailData["status"],
+) {
+  const displayedScore = Math.max(10, Number(score || 0));
+  const scoreSuffix = Number(score || 0) <= 10 ? " min" : "";
+  const prefix = `Score CBPR : ${displayedScore}/100${scoreSuffix} — `;
+
+  if (status === "neutral") {
+    if (displayedScore <= 30) {
+      return `${prefix}L'élastique est au repos, proche de son point d'équilibre.`;
+    }
+    if (displayedScore <= 80) {
+      return `${prefix}L'élastique commence à s'écarter légèrement de son centre, sans tension significative.`;
+    }
+    return `${prefix}L'élastique s'étire vers les limites de sa zone d'équilibre.`;
+  }
+
+  if (status === "opportunity") {
+    if (displayedScore <= 40) {
+      return `${prefix}L'élastique est légèrement étiré — le retour n'est pas encore clairement engagé.`;
+    }
+    if (displayedScore <= 65) {
+      return `${prefix}L'élastique est bien étiré — les conditions d'un retour commencent à se réunir.`;
+    }
+    if (displayedScore <= 85) {
+      return `${prefix}L'élastique est fortement étiré — la zone d'opportunité est significative.`;
+    }
+    return `${prefix}L'élastique est à son maximum d'étirement — c'est le cœur de la zone d'opportunité.`;
+  }
+
+  if (displayedScore <= 40) {
+    return `${prefix}L'élastique commence à dépasser son équilibre — la zone reste fragile.`;
+  }
+  if (displayedScore <= 65) {
+    return `${prefix}L'élastique est bien au-dessus de son centre — la tension haussière est importante.`;
+  }
+  if (displayedScore <= 85) {
+    return `${prefix}L'élastique est fortement étiré à la hausse — le retour vers la moyenne devient probable.`;
+  }
+  return `${prefix}L'élastique est à son maximum d'étirement haussier — la zone de risque est maximale.`;
 }
 
 function buildBrokerLinks(symbol: string) {
@@ -398,6 +456,7 @@ function mapToAssetDetail(assetResponse: any, analysisResponse: any, symbol: str
   const quote = assetResponse?.quote || {};
   const analysis = analysisResponse?.analysis || {};
   const indicators = analysis?.indicators || {};
+  const explanationData = analysis?.explanation || {};
   const status = mapSignalToStatus(analysis?.signal);
   const assetType = normalizeAssetType(
     quote?.instrument_type,
@@ -490,20 +549,7 @@ function mapToAssetDetail(assetResponse: any, analysisResponse: any, symbol: str
       upper: Number.isFinite(sma200) ? sma200 * (1 + getSmaChannelMargin(assetType)) : null,
       lower: Number.isFinite(sma200) ? sma200 * (1 - getSmaChannelMargin(assetType)) : null,
     },
-    legend: [
-      {
-        label: "Prix pivot",
-        color: "#8c8c8c27",
-      },
-      {
-        label: "Prix moyen",
-        color: "#0055ff61",
-      },
-      {
-        label: "Tendance",
-        color: "#0055ff",
-      },
-    ],
+    legend: [],
     technicalIndicators: {
       channelDirection:
         channelDirection === "haussier"
@@ -541,6 +587,17 @@ function mapToAssetDetail(assetResponse: any, analysisResponse: any, symbol: str
 
     description: buildDescription(name, symbol, assetType, exchange),
     news: buildNewsPlaceholders(symbol, signal, score),
+    explanation: {
+      title: String(explanationData?.title || "Analyse CBPR"),
+      summary: String(
+        explanationData?.summary ||
+          "Le contexte actuel reste équilibré et ne montre pas de déséquilibre technique suffisamment clair.",
+      ),
+      reasons: Array.isArray(explanationData?.reasons)
+        ? explanationData.reasons.map((item: unknown) => String(item))
+        : [],
+      scoreLabel: buildElasticScoreSentence(score, status),
+    },
   };
 }
 
@@ -561,6 +618,7 @@ export function AssetDetail() {
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
   const [openIndicatorHelp, setOpenIndicatorHelp] = useState<string | null>(null);
+  const [openCbprMethod, setOpenCbprMethod] = useState(false);
   const currentPlan: UserPlan = user?.subscription || "free";
 
   useEffect(() => {
@@ -718,6 +776,16 @@ export function AssetDetail() {
   const opportunityGradientId = `opportunityGradient-${asset?.id || "unknown"}`;
   const riskGradientId = `riskGradient-${asset?.id || "unknown"}`;
   const brokerLinks = asset ? buildBrokerLinks(asset.symbol) : [];
+  const explanation = asset?.explanation ?? {
+    title: "Analyse CBPR",
+    summary:
+      "Le contexte actuel reste équilibré et ne montre pas de déséquilibre technique suffisamment clair.",
+    reasons: [] as string[],
+    scoreLabel: buildElasticScoreSentence(
+      Number(asset?.score || 0),
+      asset?.status || "neutral",
+    ),
+  };
   const technicalIndicators = [
     {
       label: "Tendance",
@@ -1043,17 +1111,6 @@ export function AssetDetail() {
             </ComposedChart>
           </ResponsiveContainer>
 
-          <div className="mt-4 flex flex-wrap items-center justify-end gap-x-6 gap-y-2 px-1">
-            {(asset.legend || []).map((item) => (
-              <div key={item.label} className="flex items-center gap-2">
-                <div
-                  className="h-[3px] w-8 rounded-full"
-                  style={{ backgroundColor: item.color }}
-                />
-                <span className="text-xs text-gray-500">{item.label}</span>
-              </div>
-            ))}
-          </div>
         </motion.div>
 
         {/* Signal */}
@@ -1159,13 +1216,35 @@ export function AssetDetail() {
                 <p className="text-sm text-gray-600 leading-relaxed mb-3">
                   {TECHNICAL_INDICATOR_HELP[openIndicatorHelp].description}
                 </p>
-                <p className="text-sm text-gray-900 leading-relaxed font-medium">
+                <p className="text-sm text-gray-900 leading-relaxed font-medium mb-4">
                   {TECHNICAL_INDICATOR_HELP[openIndicatorHelp].insight}
                 </p>
+                {TECHNICAL_INDICATOR_HELP[openIndicatorHelp].courbe ? (
+                  <p className="text-sm text-gray-900 leading-relaxed">
+                    {TECHNICAL_INDICATOR_HELP[openIndicatorHelp].courbe}
+                  </p>
+                ) : null}
               </motion.div>
             </motion.div>
           )}
         </motion.div>
+
+        {/* Méthode cbpr */}
+        <motion.div
+          className="my-8 flex justify-center"
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.62, duration: 0.35 }}
+        >
+          <button
+            type="button"
+            onClick={() => setOpenCbprMethod(true)}
+            className="text-sm text-gray-400 hover:text-gray-600 transition-colors underline underline-offset-4"
+          >
+            Comprendre la méthode CBPR
+          </button>
+        </motion.div>
+
 
         {/* achet cet actif */}
         <motion.div
@@ -1174,9 +1253,6 @@ export function AssetDetail() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.23, duration: 0.5 }}
         >
-          <div className="text-xs text-gray-400 mb-3 tracking-wide uppercase px-1">
-            Acheter cet actif
-          </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {brokerLinks.map((platform, index) => (
               <motion.button
@@ -1243,24 +1319,79 @@ export function AssetDetail() {
           <h2 className="font-semibold text-gray-900 mb-4 text-lg tracking-tight">
             Synthèse récente
           </h2>
-          <div className="flex flex-col gap-2">
-            {asset.news.map((news, index) => (
-              <motion.button
-                key={news.id}
-                className="bg-gray-50 hover:bg-gray-100 px-4 py-3 rounded-2xl text-sm text-gray-700 transition-all text-left"
+          <div className="flex flex-col gap-3">
+            <motion.div
+              className="bg-gray-50 px-4 py-4 rounded-2xl"
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.6, duration: 0.3 }}
+            >
+              <div className="text-sm font-semibold text-gray-900 mb-1">
+                {explanation.title}
+              </div>
+              <div className="text-sm text-gray-600 leading-relaxed">
+                {explanation.summary}
+              </div>
+            </motion.div>
+
+            {explanation.reasons.map((reason, index) => (
+              <motion.div
+                key={`${reason}-${index}`}
+                className="bg-gray-50 px-4 py-3 rounded-2xl text-sm text-gray-700"
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{
-                  delay: 0.6 + index * 0.1,
+                  delay: 0.68 + index * 0.08,
                   duration: 0.3,
                 }}
-                whileHover={{ scale: 1.02, x: 5 }}
-                whileTap={{ scale: 0.98 }}
               >
-                {news.title}
-              </motion.button>
+                {reason}
+              </motion.div>
             ))}
+
+            <motion.div
+              className="bg-gray-50 px-4 py-4 rounded-2xl"
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{
+                delay: 0.92,
+                duration: 0.3,
+              }}
+            >
+              <div className="text-sm text-gray-700 leading-relaxed">
+                {explanation.scoreLabel}
+              </div>
+            </motion.div>
+
+            {asset.news
+              .filter((news) => !news.title.startsWith("Score CBPR :"))
+              .map((news, index) => (
+                <motion.div
+                  key={news.id}
+                  className="bg-gray-50 px-4 py-3 rounded-2xl text-sm text-gray-700"
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{
+                    delay: 1 + index * 0.08,
+                    duration: 0.3,
+                  }}
+                >
+                  {news.title}
+                </motion.div>
+              ))}
           </div>
+        </motion.div>
+
+        <CbprMethode isOpen={openCbprMethod} onClose={() => setOpenCbprMethod(false)} />
+
+        <motion.div
+          className="mt-8 pb-6 text-center"
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.65, duration: 0.4 }}
+        >
+          <p className="text-xs text-gray-400">© CBPR Capital – All rights reserved</p>
+          <p className="text-xs text-gray-400 mt-1">CBPR™ methodology</p>
         </motion.div>
       </div>
     </PageTransition>

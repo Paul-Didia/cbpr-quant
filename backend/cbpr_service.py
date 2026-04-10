@@ -404,6 +404,148 @@ def is_cbpr_signal_actionable(row: pd.Series) -> bool:
     return True
 
 
+# --- CBPR Explanation Builder ---
+
+def build_cbpr_explanation(
+    row: pd.Series,
+    signal: str,
+    score: int,
+    bollinger_zone: str,
+) -> dict[str, Any]:
+    reasons: list[str] = []
+
+    direction = row.get("direction", "neutre")
+    channel_direction = row.get("channel_direction", "neutre")
+    rsi = row.get("RSI")
+    macd = row.get("MACD")
+    signal_line = row.get("Signal")
+    close = row.get("close")
+    sma200 = row.get("SMA200")
+    sma200_upper = row.get("SMA200_upper")
+    sma200_lower = row.get("SMA200_lower")
+    pivot_support = row.get("pivot_support")
+    pivot_resistance = row.get("pivot_resistance")
+    buy_days = int(row.get("buy_zone_days", 0) or 0)
+
+    if signal == "ACHAT":
+        if pd.notna(close) and pd.notna(sma200_lower):
+            reasons.append("Le prix évolue sous la borne basse du canal CBPR, ce qui place l’actif dans une zone d’excès baissier.")
+
+        if channel_direction == "baissier":
+            reasons.append("La tendance de fond reste baissière, ce qui renforce l’idée d’un actif actuellement sous pression.")
+        elif channel_direction == "neutre":
+            reasons.append("La tendance de fond reste modérée, ce qui laisse la place à un retour technique si le mouvement ralentit.")
+        elif channel_direction == "haussier":
+            reasons.append("La tendance de fond reste haussière, ce qui rend l’écart sous le canal encore plus intéressant à surveiller.")
+
+        if pd.notna(rsi):
+            if float(rsi) <= 30:
+                reasons.append("Le RSI indique un excès baissier marqué, signe d’un mouvement déjà très étiré.")
+            elif float(rsi) <= 40:
+                reasons.append("Le RSI reste faible, ce qui montre que la pression vendeuse est encore importante.")
+
+        if pd.notna(macd) and pd.notna(signal_line):
+            if float(macd) > float(signal_line):
+                reasons.append("Le MACD commence à se redresser au-dessus de sa ligne signal, ce qui suggère un ralentissement de la baisse.")
+            else:
+                reasons.append("Le MACD reste encore sous sa ligne signal, ce qui invite à surveiller la stabilisation du mouvement.")
+
+        if pd.notna(pivot_support) and pd.notna(close):
+            support_distance_pct = abs(float(close) - float(pivot_support)) / max(abs(float(close)), 1e-6)
+            if float(pivot_support) <= float(close) and support_distance_pct <= 0.03:
+                reasons.append("Un pivot support reste proche du prix actuel, ce qui renforce la possibilité d’une réaction technique.")
+
+        if buy_days >= 20:
+            reasons.append("L’actif reste depuis plusieurs jours dans sa zone d’achat, ce qui réduit la qualité du signal malgré l’excès observé.")
+
+        title = "Pourquoi opportunité ?"
+        summary = "Le signal est classé en opportunité car le prix se trouve dans une zone d’excès baissier, avec un contexte technique compatible avec un retour à l’équilibre."
+
+    elif signal == "VENTE":
+        if pd.notna(close) and pd.notna(sma200_upper):
+            reasons.append("Le prix évolue au-dessus de la borne haute du canal CBPR, ce qui place l’actif dans une zone d’excès haussier.")
+
+        if channel_direction == "haussier":
+            reasons.append("La tendance de fond reste haussière, mais l’actif paraît déjà fortement étendu au-dessus de son équilibre.")
+        elif channel_direction == "neutre":
+            reasons.append("La tendance de fond reste modérée, ce qui peut favoriser un retour vers la zone centrale du canal.")
+        elif channel_direction == "baissier":
+            reasons.append("La tendance de fond est déjà baissière, ce qui rend l’excès haussier encore plus fragile.")
+
+        if pd.notna(rsi):
+            if float(rsi) >= 70:
+                reasons.append("Le RSI indique un excès haussier marqué, signe d’un mouvement déjà très tendu.")
+            elif float(rsi) >= 60:
+                reasons.append("Le RSI reste élevé, ce qui montre que le prix avance dans une zone déjà exigeante.")
+
+        if pd.notna(macd) and pd.notna(signal_line):
+            if float(macd) < float(signal_line):
+                reasons.append("Le MACD passe sous sa ligne signal, ce qui suggère un ralentissement du mouvement haussier.")
+            else:
+                reasons.append("Le MACD reste encore orienté à la hausse, ce qui invite à surveiller le timing du retournement.")
+
+        if pd.notna(pivot_resistance) and pd.notna(close):
+            resistance_distance_pct = abs(float(pivot_resistance) - float(close)) / max(abs(float(close)), 1e-6)
+            if float(pivot_resistance) >= float(close) and resistance_distance_pct <= 0.03:
+                reasons.append("Un pivot résistance se situe proche du prix actuel, ce qui peut freiner la poursuite du mouvement.")
+
+        title = "Pourquoi risque ?"
+        summary = "Le signal est classé en risque car le prix se trouve dans une zone d’excès haussier, avec plusieurs indicateurs suggérant une zone plus fragile qu’une nouvelle opportunité d’entrée."
+
+    else:
+        if pd.notna(close) and pd.notna(sma200_lower) and pd.notna(sma200_upper):
+            reasons.append("Le prix reste à l’intérieur du canal CBPR, sans excès clair au-dessus ou au-dessous de son équilibre de long terme.")
+
+        if channel_direction == "haussier":
+            reasons.append("La tendance de fond reste haussière, mais le prix actuel ne se trouve pas dans une zone d’excès assez marquée pour parler d’opportunité immédiate.")
+        elif channel_direction == "baissier":
+            reasons.append("La tendance de fond reste baissière, mais le prix actuel ne se trouve pas encore dans une zone d’excès suffisamment claire pour parler d’opportunité.")
+        else:
+            reasons.append("La tendance de fond reste neutre, ce qui traduit un marché sans déséquilibre majeur à cet instant.")
+
+        if pd.notna(rsi):
+            if 45 <= float(rsi) <= 55:
+                reasons.append("Le RSI reste proche de son point d’équilibre, sans tension forte dans un sens ou dans l’autre.")
+            elif 40 <= float(rsi) <= 60:
+                reasons.append("Le RSI reste intermédiaire, ce qui confirme l’absence d’excès net.")
+
+        if pd.notna(macd) and pd.notna(signal_line):
+            macd_gap = abs(float(macd) - float(signal_line))
+            if macd_gap < max(abs(float(close)) * 0.002, 0.05):
+                reasons.append("Le MACD reste proche de sa ligne signal, ce qui suggère une dynamique encore équilibrée.")
+
+        if bollinger_zone == "Zone neutre":
+            reasons.append("Les bandes de Bollinger ne montrent pas de tension particulière autour du prix actuel.")
+        elif bollinger_zone == "Sur bande basse":
+            reasons.append("Le prix touche une zone basse de Bollinger, mais le reste du contexte ne valide pas encore une opportunité claire.")
+        elif bollinger_zone == "Sur bande haute":
+            reasons.append("Le prix touche une zone haute de Bollinger, mais le reste du contexte ne valide pas encore un risque suffisamment fort.")
+
+        nearest_pivot_reason_added = False
+        if pd.notna(pivot_support) and pd.notna(close):
+            support_distance_pct = abs(float(close) - float(pivot_support)) / max(abs(float(close)), 1e-6)
+            if float(pivot_support) <= float(close) and support_distance_pct <= 0.02:
+                reasons.append("Un pivot reste proche, mais il ne suffit pas à lui seul à transformer le contexte en opportunité claire.")
+                nearest_pivot_reason_added = True
+        if not nearest_pivot_reason_added and pd.notna(pivot_resistance) and pd.notna(close):
+            resistance_distance_pct = abs(float(pivot_resistance) - float(close)) / max(abs(float(close)), 1e-6)
+            if float(pivot_resistance) >= float(close) and resistance_distance_pct <= 0.02:
+                reasons.append("Une résistance pivot reste proche, mais le contexte global demeure encore équilibré.")
+
+        title = "Pourquoi neutre ?"
+        summary = "Le signal est classé en neutre car le prix reste globalement dans une zone d’équilibre, sans combinaison d’indicateurs suffisamment forte pour parler d’opportunité ou de risque marqué."
+
+    if not reasons:
+        reasons.append("Le contexte actuel reste équilibré et ne montre pas de déséquilibre technique suffisamment clair.")
+
+    return {
+        "title": title,
+        "summary": summary,
+        "reasons": reasons[:4],
+        "scoreLabel": f"Score CBPR : {score}/100",
+    }
+
+
 def cbpr_analyze_historical(
     df_4h: pd.DataFrame,
     symbol: str,
@@ -556,10 +698,12 @@ def analyze_cbpr(
         bollinger_zone = "Sur bande basse"
     else:
         bollinger_zone = "Zone neutre"
+    explanation = build_cbpr_explanation(latest, signal, score, bollinger_zone)
 
     return {
         "signal": signal,
         "score": score,
+        "explanation": explanation,
         "signals": signals,
         "lastSignal": last_signal,
         "indicators": {
