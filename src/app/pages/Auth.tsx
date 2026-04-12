@@ -35,6 +35,7 @@ export function Auth() {
           return;
         }
         await signup(email, password, name);
+        sessionStorage.setItem('cbpr_show_method_on_home', 'true');
       }
       navigate('/home');
     } catch (err) {

@@ -7,6 +7,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "motion/react";
 import { PageTransition } from "../components/PageTransition";
+import { CbprMethode } from "../components/CbprMethode";
 import { AssetIcon } from "../components/AssetIcon";
 import { useFavorites } from "../contexts/FavoritesContext";
 import { apiService } from "../services/api";
@@ -133,6 +134,7 @@ function getCachedLibraryAssets(): Array<{
 
 export function Home() {
   const { favorites } = useFavorites();
+  const [openCbprMethod, setOpenCbprMethod] = useState(false);
   const [watchedAssets, setWatchedAssets] = useState<HomeAsset[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [visibleCount, setVisibleCount] = useState(HOME_VISIBLE_BATCH);
@@ -143,6 +145,17 @@ export function Home() {
       top: 0,
       behavior: "auto",
     });
+  }, []);
+
+  useEffect(() => {
+    try {
+      const shouldShowMethod = sessionStorage.getItem("cbpr_show_method_on_home") === "true";
+
+      if (shouldShowMethod) {
+        setOpenCbprMethod(true);
+        sessionStorage.removeItem("cbpr_show_method_on_home");
+      }
+    } catch {}
   }, []);
 
   useEffect(() => {
@@ -388,6 +401,7 @@ export function Home() {
             </Link>
           </motion.div>
         </div>
+        <CbprMethode isOpen={openCbprMethod} onClose={() => setOpenCbprMethod(false)} />
       </PageTransition>
     );
   }

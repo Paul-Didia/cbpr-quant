@@ -15,6 +15,16 @@ type Slide = {
 
 const slides: Slide[] = [
   {
+    title: "À quoi sert CBPR ?",
+    paragraphs: [
+      "Les marchés financiers évoluent en permanence entre équilibre et excès.",
+      "Le prix d’un actif monte, baisse, et s’éloigne parfois de sa valeur d’équilibre.",
+      "Le problème : il est difficile de savoir si un mouvement est encore sain… ou déjà excessif.",
+    ],
+    highlight:
+      "💡 CBPR sert à identifier ces zones d’équilibre et de déséquilibre pour mieux comprendre le contexte du marché.",
+  },
+  {
     title: "Comment fonctionne l’analyse CBPR ?",
     paragraphs: [
       "Imagine le prix d’un actif comme un élastique attaché à un point central : sa moyenne de long terme.",
@@ -86,17 +96,17 @@ export function CbprMethode({ isOpen, onClose }: CbprMethodeProps) {
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 20, scale: 0.98 }}
           transition={{ duration: 0.22 }}
-          className="w-full max-w-2xl rounded-[32px] bg-white shadow-2xl border border-gray-100 overflow-hidden"
+          className="w-full max-w-2xl max-h-[88vh] rounded-[28px] bg-white shadow-2xl border border-gray-100 overflow-hidden flex flex-col"
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="px-6 pt-6 pb-2 flex items-start justify-between gap-4">
+          <div className="px-4 sm:px-6 pt-3 sm:pt-6 pb-2 flex items-start justify-between gap-3">
             <div className="flex items-center gap-3">
-              <div className="w-1 h-10 rounded-full bg-[#3590F3]" />
+              {/* <div className="w-1 h-10 rounded-full bg-[#3590F3]" /> */}
               <div>
-                <p className="text-xs uppercase tracking-[0.18em] text-gray-400">
+                <p className="text-[10px] sm:text-xs uppercase tracking-[0.14em] sm:tracking-[0.18em] text-gray-400">
                   CBPR™ methodology
                 </p>
-                <h2 className="text-2xl font-semibold tracking-tight text-gray-900">
+                <h2 className="text-[17px] sm:text-2xl font-semibold tracking-tight text-gray-900 leading-tight pr-2">
                   {currentSlide.title}
                 </h2>
               </div>
@@ -108,11 +118,11 @@ export function CbprMethode({ isOpen, onClose }: CbprMethodeProps) {
               className="text-gray-400 hover:text-gray-700 transition-colors"
               aria-label="Fermer"
             >
-              <X className="w-6 h-6" />
+              <X className="w-5 h-5 sm:w-6 sm:h-6" />
             </button>
           </div>
 
-          <div className="px-6 pb-6">
+          <div className="px-4 sm:px-6 pb-4 sm:pb-6 flex-1 min-h-0 flex flex-col">
             <AnimatePresence mode="wait">
               <motion.div
                 key={currentIndex}
@@ -120,21 +130,21 @@ export function CbprMethode({ isOpen, onClose }: CbprMethodeProps) {
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -18 }}
                 transition={{ duration: 0.22 }}
-                className="rounded-[28px] bg-[#f8f9fb] px-6 py-6"
+                className="rounded-[24px] px-2 sm:px-6 py-4 sm:py-6 overflow-y-auto"
               >
-                <div className="space-y-5">
+                <div className="space-y-2 sm:space-y-5">
                   {currentSlide.paragraphs.map((paragraph) => (
                     <p
                       key={paragraph}
-                      className="text-[18px] leading-[1.35] text-gray-700 tracking-tight"
+                      className="text-[14px] sm:text-[17px] leading-[1.5] sm:leading-[1.35] text-gray-700 tracking-tight"
                     >
                       {paragraph}
                     </p>
                   ))}
 
                   {currentSlide.highlight ? (
-                    <div className="rounded-2xl bg-[#eef3ff] px-4 py-4">
-                      <p className="text-[18px] leading-[1.35] text-[#27408f] font-medium tracking-tight">
+                    <div className="rounded-2xl bg-[#eef3ff] px-4 py-3 sm:py-4">
+                      <p className="text-[14px] sm:text-[17px] leading-[1.5] sm:leading-[1.35] text-[#27408f] font-medium tracking-tight">
                         {currentSlide.highlight}
                       </p>
                     </div>
@@ -143,24 +153,24 @@ export function CbprMethode({ isOpen, onClose }: CbprMethodeProps) {
               </motion.div>
             </AnimatePresence>
 
-            <div className="mt-5 flex items-center justify-between gap-4">
+            <div className="mt-4 sm:mt-5 flex items-center justify-between gap-2 sm:gap-4">
               <button
                 type="button"
                 onClick={goPrevious}
-                className="inline-flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 transition-colors"
+                className="inline-flex items-center gap-1.5 sm:gap-2 rounded-2xl border border-gray-200 bg-white px-3 sm:px-4 py-2.5 sm:py-3 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 transition-colors flex-shrink-0"
               >
-                <ChevronLeft className="w-4 h-4" />
+                <ChevronLeft className="w-3 h-2" />
                 Précédent
               </button>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 justify-center flex-1">
                 {slides.map((_, index) => (
                   <button
                     key={index}
                     type="button"
                     onClick={() => setCurrentIndex(index)}
-                    className={`h-2.5 rounded-full transition-all ${
-                      index === currentIndex ? "w-7 bg-[#27408f]" : "w-2.5 bg-gray-300"
+                    className={`h-2 rounded-full transition-all ${
+                      index === currentIndex ? "w-6 bg-[#27408f]" : "w-2 bg-gray-300"
                     }`}
                     aria-label={`Aller à la slide ${index + 1}`}
                   />
@@ -170,10 +180,10 @@ export function CbprMethode({ isOpen, onClose }: CbprMethodeProps) {
               <button
                 type="button"
                 onClick={goNext}
-                className="inline-flex items-center gap-2 rounded-2xl bg-[#27408f] px-4 py-3 text-sm font-medium text-white shadow-sm hover:bg-[#203678] transition-colors"
+                className="inline-flex items-center gap-1.5 sm:gap-2 rounded-2xl bg-[#27408f] px-3 sm:px-4 py-2.5 sm:py-3 text-sm font-medium text-white shadow-sm hover:bg-[#203678] transition-colors flex-shrink-0"
               >
                 Suivant
-                <ChevronRight className="w-4 h-4" />
+                <ChevronRight className="w-3 h-2" />
               </button>
             </div>
           </div>
