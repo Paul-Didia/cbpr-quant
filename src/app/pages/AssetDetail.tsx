@@ -719,17 +719,26 @@ export function AssetDetail() {
         ]);
 
         const mapped = mapToAssetDetail(assetResponse, analysisResponse, symbol);
-        const requiredPlan = getRequiredPlanForAsset({
-          symbol: mapped.symbol,
-          assetType: mapped.assetType,
-        });
-        const isAllowed = isAssetAllowedForPlan(
-          {
-            symbol: mapped.symbol,
-            assetType: mapped.assetType,
-          },
-          currentPlan,
-        );
+        const backendRequiredPlan = String(assetResponse?.subscription || "")
+          .trim()
+          .toLowerCase();
+
+        const requiredPlan: UserPlan =
+          backendRequiredPlan === "free" ||
+          backendRequiredPlan === "pro" ||
+          backendRequiredPlan === "quant"
+            ? (backendRequiredPlan as UserPlan)
+            : getRequiredPlanForAsset({
+                symbol: mapped.symbol,
+                assetType: mapped.assetType,
+              });
+
+        const isAllowed =
+          currentPlan === "quant"
+            ? true
+            : currentPlan === "pro"
+              ? requiredPlan !== "quant"
+              : requiredPlan === "free";
 
         if (!isAllowed) {
           if (!isCancelled) {

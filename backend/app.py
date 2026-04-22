@@ -198,7 +198,10 @@ def get_stripe_plan_by_email(email: str) -> str:
 
 
 def normalize_access_symbol(symbol: str) -> str:
-    return str(symbol or "").strip().upper()
+    normalized = str(symbol or "").strip().upper()
+    if ":" in normalized:
+        normalized = normalized.split(":")[-1]
+    return normalized
 
 
 def infer_asset_type(symbol: str, quote_data: dict[str, Any]) -> str:
@@ -210,16 +213,19 @@ def infer_asset_type(symbol: str, quote_data: dict[str, Any]) -> str:
     crypto_exchanges = {
         "coinbase", "coinbase pro", "huobi", "binance", "kraken", "bybit", "okx"
     }
-
-    if exchange == "forex" or "forex" in instrument_type or "/" in normalized_symbol:
-        return "forex"
+    crypto_bases = {"BTC", "ETH", "SOL", "XRP", "BNB", "ADA", "DOGE", "AVAX", "LINK", "DOT", "TRX", "TON", "MATIC", "SHIB", "BCH"}
+    base_symbol = normalized_symbol.split("/")[0] if "/" in normalized_symbol else normalized_symbol
 
     if (
         "crypto" in instrument_type
         or any(item in exchange for item in crypto_exchanges)
         or any(token in name for token in ["bitcoin", "ethereum", "solana", "ripple", "cardano", "bnb"])
+        or base_symbol in crypto_bases
     ):
         return "crypto"
+
+    if exchange == "forex" or "forex" in instrument_type:
+        return "forex"
 
     if "etf" in instrument_type or "etf" in name or "ucits" in name:
         return "etf"
@@ -228,28 +234,36 @@ def infer_asset_type(symbol: str, quote_data: dict[str, Any]) -> str:
 
 
 def get_required_plan_for_symbol(symbol: str, quote_data: dict[str, Any]) -> str:
-    asset_type = infer_asset_type(symbol, quote_data)
     normalized_symbol = normalize_access_symbol(symbol)
+
+    if normalized_symbol in FREE_STOCK_SYMBOLS:
+        return "free"
+
+    if normalized_symbol in FREE_CRYPTO_SYMBOLS:
+        return "free"
+
+    if normalized_symbol in PRO_CRYPTO_SYMBOLS:
+        return "pro"
+
+    if normalized_symbol in FREE_ETF_SYMBOLS:
+        return "free"
+
+    if normalized_symbol in PRO_ETF_SYMBOLS:
+        return "pro"
+
+    asset_type = infer_asset_type(symbol, quote_data)
 
     if asset_type == "forex":
         return "quant"
 
     if asset_type == "crypto":
-        if normalized_symbol in FREE_CRYPTO_SYMBOLS:
-            return "free"
-        if normalized_symbol in PRO_CRYPTO_SYMBOLS:
-            return "pro"
         return "quant"
 
     if asset_type == "etf":
-        if normalized_symbol in FREE_ETF_SYMBOLS:
-            return "free"
-        if normalized_symbol in PRO_ETF_SYMBOLS:
-            return "pro"
         return "quant"
 
     if asset_type == "stock":
-        return "free" if normalized_symbol in FREE_STOCK_SYMBOLS else "pro"
+        return "pro"
 
     return "quant"
 
@@ -324,8 +338,7 @@ def enforce_symbol_access(
     env = ENV
 
     fallback_email = str(x_user_email or "").strip().lower() or None
-    token_email = get_user_email_from_token(authorization)
-    email = token_email or fallback_email
+    email = fallback_email or get_user_email_from_token(authorization)
 
     if email:
         plan = get_stripe_plan_by_email(email)
@@ -337,8 +350,9 @@ def enforce_symbol_access(
         plan = "free"
         print(f"[ACCESS] No authenticated email found, falling back to free for symbol={symbol}")
 
+    required_plan = get_required_plan_for_symbol(symbol, quote_data)
+
     if not is_symbol_allowed_for_plan(symbol, quote_data, plan):
-        required_plan = get_required_plan_for_symbol(symbol, quote_data)
         print(
             f"[ACCESS] Denied symbol={symbol} plan={plan} required_plan={required_plan}"
         )
@@ -347,7 +361,7 @@ def enforce_symbol_access(
             detail=f"This asset requires the {required_plan} plan",
         )
 
-    print(f"[ACCESS] Granted symbol={symbol} plan={plan}")
+    print(f"[ACCESS] Granted symbol={symbol} plan={plan} required_plan={required_plan}")
     return plan
 
 

@@ -20,8 +20,32 @@ const FREE_STOCK_SYMBOLS = new Set([
   "PDD","TCEHY","BIDU","SE","MELI","TSM","INFY","SAP","ORAN","VOD"
 ]);
 
+const FREE_CRYPTO_SYMBOLS = new Set([
+  "BTC/USD", "ETH/USD", "SOL/USD", "XRP/USD", "BNB/USD"
+]);
+
+const PRO_CRYPTO_SYMBOLS = new Set([
+  "ADA/USD", "DOGE/USD", "AVAX/USD", "LINK/USD", "DOT/USD",
+  "TRX/USD", "TON/USD", "MATIC/USD", "SHIB/USD", "BCH/USD"
+]);
+
+const FREE_ETF_SYMBOLS = new Set([
+  "SPY", "QQQ", "VTI", "IVV", "VT"
+]);
+
+const PRO_ETF_SYMBOLS = new Set([
+  "IWM", "DIA", "XLK", "VEA", "EEM",
+  "VWO", "XLF", "XLE", "ARKK", "VNQ"
+]);
+
 function normalizeSymbol(symbol?: string) {
-  return String(symbol || "").trim().toUpperCase();
+  let normalized = String(symbol || "").trim().toUpperCase();
+
+  if (":" in Object(normalized) && normalized.includes(":")) {
+    normalized = normalized.split(":").pop() || normalized;
+  }
+
+  return normalized;
 }
 
 export function getRequiredPlanForAsset(
@@ -29,16 +53,40 @@ export function getRequiredPlanForAsset(
 ): UserPlan {
   const symbol = normalizeSymbol(asset.symbol);
 
-  if (asset.assetType === "crypto" || asset.assetType === "forex") {
+  if (FREE_STOCK_SYMBOLS.has(symbol)) {
+    return "free";
+  }
+
+  if (asset.assetType === "crypto") {
+    if (FREE_CRYPTO_SYMBOLS.has(symbol)) {
+      return "free";
+    }
+
+    if (PRO_CRYPTO_SYMBOLS.has(symbol)) {
+      return "pro";
+    }
+
     return "quant";
   }
 
   if (asset.assetType === "etf") {
-    return "pro";
+    if (FREE_ETF_SYMBOLS.has(symbol)) {
+      return "free";
+    }
+
+    if (PRO_ETF_SYMBOLS.has(symbol)) {
+      return "pro";
+    }
+
+    return "quant";
+  }
+
+  if (asset.assetType === "forex") {
+    return "quant";
   }
 
   if (asset.assetType === "stock") {
-    return FREE_STOCK_SYMBOLS.has(symbol) ? "free" : "pro";
+    return "pro";
   }
 
   return "quant";
