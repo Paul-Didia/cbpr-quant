@@ -646,7 +646,12 @@ export function AssetDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const symbol = decodeURIComponent(id || "");
-  const { isFavorite, addFavorite, removeFavorite } = useFavorites();
+  const { isFavorite, addFavorite, removeFavorite, favorites } = useFavorites() as {
+    isFavorite: (assetId: string) => boolean;
+    addFavorite: (assetId: string) => Promise<void>;
+    removeFavorite: (assetId: string) => Promise<void>;
+    favorites?: string[];
+  };
   const { user } = useAuth();
   const { trigger } = useWebHaptics();
   const triggerBackTap = () => trigger("light");
@@ -674,6 +679,23 @@ export function AssetDetail() {
     setOptimisticFavorite(null);
     lastFavoriteActionRef.current = 0;
   }, [asset?.id]);
+
+  const [favoriteLimitToastVisible, setFavoriteLimitToastVisible] = useState(false);
+  const favoriteLimitToastTimeoutRef = useRef<number | null>(null);
+  const showFavoriteLimitToast = () => {
+    setFavoriteLimitToastVisible(true);
+
+    if (favoriteLimitToastTimeoutRef.current) {
+      window.clearTimeout(favoriteLimitToastTimeoutRef.current);
+    }
+
+    favoriteLimitToastTimeoutRef.current = window.setTimeout(() => {
+      setFavoriteLimitToastVisible(false);
+      favoriteLimitToastTimeoutRef.current = null;
+    }, 2000);
+  };
+
+  const favoriteCount = Array.isArray(favorites) ? favorites.length : 0;
 
 
   useEffect(() => {
@@ -744,6 +766,14 @@ export function AssetDetail() {
     };
   }, [symbol, currentPlan, isFavorite]);
 
+  useEffect(() => {
+    return () => {
+      if (favoriteLimitToastTimeoutRef.current) {
+        window.clearTimeout(favoriteLimitToastTimeoutRef.current);
+      }
+    };
+  }, []);
+
   const toggleWatchlist = async () => {
     if (!asset) return;
 
@@ -762,6 +792,12 @@ export function AssetDetail() {
       optimisticFavorite !== null ? optimisticFavorite : isFavorite(asset.id);
 
     const nextValue = !currentValue;
+
+    if (nextValue && !currentValue && favoriteCount >= 15) {
+      showFavoriteLimitToast();
+      return;
+    }
+
     const actionId = lastFavoriteActionRef.current + 1;
     lastFavoriteActionRef.current = actionId;
 
@@ -782,6 +818,13 @@ export function AssetDetail() {
       setOptimisticFavorite(null);
     } catch (error) {
       console.error("Error toggling favorite:", error);
+
+      const errorMessage =
+        error instanceof Error ? error.message : String(error || "");
+
+      if (nextValue && errorMessage.toLowerCase().includes("maximum 15 favorites allowed")) {
+        showFavoriteLimitToast();
+      }
 
       if (lastFavoriteActionRef.current !== actionId) {
         return;
@@ -1054,7 +1097,7 @@ export function AssetDetail() {
         </motion.div>
 
         <motion.div
-          className="pb-5 mb-4"
+          className="pb-3"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2, duration: 0.5 }}
@@ -1448,6 +1491,20 @@ export function AssetDetail() {
         </motion.div>
 
         <CbprMethode isOpen={openCbprMethod} onClose={() => setOpenCbprMethod(false)} />
+
+        {favoriteLimitToastVisible && (
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 16 }}
+            transition={{ duration: 0.2 }}
+            className="fixed left-1/2 bottom-24 z-50 -translate-x-1/2 px-4 w-[calc(100%-2rem)] max-w-sm"
+          >
+            <div className="rounded-2xl bg-gray-900/95 text-white shadow-2xl px-4 py-3 text-sm font-medium backdrop-blur-md border border-white/10 text-center">
+              Maximum 15 favoris autorisés.
+            </div>
+          </motion.div>
+        )}
 
         <motion.div
           className="mt-8 pb-6 text-center"

@@ -227,6 +227,17 @@ app.post("/make-server-819c6d9b/favorites", async (c: Context) => {
   const favorites = ((await kv.get(`user:${user.id}:favorites`)) as string[] | null) || [];
   
   if (!favorites.includes(assetId)) {
+    if (favorites.length >= 15) {
+      return c.json(
+        {
+          error: "Maximum 15 favorites allowed",
+          limit: 15,
+          currentCount: favorites.length,
+        },
+        400,
+      );
+    }
+
     favorites.push(assetId);
     await kv.set(`user:${user.id}:favorites`, favorites);
   }

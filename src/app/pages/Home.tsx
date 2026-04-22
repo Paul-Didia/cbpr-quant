@@ -27,6 +27,7 @@ const LIBRARY_CACHE_KEY = "cbpr_library_cache_v1";
 const HOME_ASSET_CACHE_PREFIX = "cbpr_home_asset_";
 const HOME_CACHE_DURATION = 1000 * 60 * 60 * 4; // 4h
 const HOME_VISIBLE_BATCH = 5;
+const HOME_ANALYSIS_REQUEST_LIMIT = 7;
 
 function getHomeAssetCacheKey(symbol: string) {
   return `${HOME_ASSET_CACHE_PREFIX}${encodeURIComponent(symbol)}`;
@@ -58,13 +59,13 @@ function setCachedHomeAsset(symbol: string, data: HomeAsset) {
         timestamp: Date.now(),
       }),
     );
-  } catch {}
+  } catch { }
 }
 
 function removeCachedHomeAsset(symbol: string) {
   try {
     window.localStorage.removeItem(getHomeAssetCacheKey(symbol));
-  } catch {}
+  } catch { }
 }
 
 function inferAssetType(
@@ -155,7 +156,7 @@ export function Home() {
         setOpenCbprMethod(true);
         sessionStorage.removeItem("cbpr_show_method_on_home");
       }
-    } catch {}
+    } catch { }
   }, []);
 
   useEffect(() => {
@@ -208,14 +209,22 @@ export function Home() {
       try {
         const cachedLibrary = getCachedLibraryAssets();
         const visibleFavorites = favorites.slice(0, visibleCount);
+        const requestableFavorites = visibleFavorites.slice(0, HOME_ANALYSIS_REQUEST_LIMIT);
 
-        const results = await Promise.all(
-          visibleFavorites.map(async (symbol): Promise<HomeAsset | null> => {
-            const cachedAsset = getCachedHomeAsset(symbol);
-            if (cachedAsset) {
-              return cachedAsset;
-            }
+        const cachedAssetsMap = new Map<string, HomeAsset>();
+        visibleFavorites.forEach((symbol) => {
+          const cachedAsset = getCachedHomeAsset(symbol);
+          if (cachedAsset) {
+            cachedAssetsMap.set(symbol, cachedAsset);
+          }
+        });
 
+        const symbolsToFetch = requestableFavorites.filter(
+          (symbol) => !cachedAssetsMap.has(symbol),
+        );
+
+        const fetchedResults = await Promise.all(
+          symbolsToFetch.map(async (symbol): Promise<HomeAsset | null> => {
             try {
               const [assetResponse, analysisResponse] = await Promise.all([
                 apiService.getAssetDetail(symbol),
@@ -255,9 +264,15 @@ export function Home() {
           }),
         );
 
-        const validResults = results.filter(
-          (item): item is HomeAsset => item !== null,
-        );
+        fetchedResults.forEach((asset) => {
+          if (asset) {
+            cachedAssetsMap.set(asset.id, asset);
+          }
+        });
+
+        const validResults = visibleFavorites
+          .map((symbol) => cachedAssetsMap.get(symbol) || null)
+          .filter((item): item is HomeAsset => item !== null);
 
         if (!isCancelled) {
           setWatchedAssets(validResults);
@@ -380,9 +395,12 @@ export function Home() {
               <h2 className="text-xl font-semibold text-gray-900 tracking-tight">
                 Aucun actif suivi
               </h2>
-              <p className="text-gray-600 leading-relaxed px-4">
+              <p className="text-gray-600 leading-relaxed px-4 mb-2">
                 Commencez par ajouter des actifs à votre liste
                 de suivi depuis la bibliothèque
+              </p>
+              <p className="text-gray-600 leading-relaxed px-4">
+                15 actifs maximum
               </p>
             </div>
 
@@ -422,6 +440,10 @@ export function Home() {
           Mes actifs suivis
         </motion.h1>
 
+        <div className="flex items-center justify-between text-xs text-gray-400 mb-4 tracking-wide">
+          <span>Analyse temps réel</span>
+        </div>
+
         <div className="space-y-3">
           {isLoading
             ? Array.from({ length: Math.max(favorites.length, 3) }).map((_, index) => (
@@ -452,86 +474,86 @@ export function Home() {
               </motion.div>
             ))
             : displayedAssets.map((asset, index) => {
-                const isPlaceholder = "isPlaceholder" in asset && asset.isPlaceholder;
-                return (
-              <motion.div
-                key={asset.id}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: index * 0.1, duration: 0.5 }}
-              >
-                {isPlaceholder ? (
-                  <div className="block bg-white rounded-2xl p-4 border border-gray-100">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-4 flex-1">
-                        <div className="w-14 h-14 rounded-2xl bg-gray-100 animate-pulse" />
-
-                        <div className="flex-1">
-                          <div className="font-semibold text-gray-900 tracking-tight">
-                            {asset.symbol}
-                          </div>
-                          <div className="text-sm text-gray-400 mt-0.5">
-                            Chargement...
-                          </div>
-                        </div>
-
-                        <div className="text-right">
-                          <div className="h-5 w-16 bg-gray-100 rounded-md animate-pulse" />
-                        </div>
-                      </div>
-
-                      <div className="w-5 h-5 ml-4 bg-gray-100 rounded-md animate-pulse" />
-                    </div>
-                  </div>
-                ) : (
-                  <Link to={`/asset/${encodeURIComponent(asset.id)}`}>
-                    <div className="block bg-white rounded-2xl p-4 border border-gray-100 active:bg-gray-50 transition-colors">
+              const isPlaceholder = "isPlaceholder" in asset && asset.isPlaceholder;
+              return (
+                <motion.div
+                  key={asset.id}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: index * 0.1, duration: 0.5 }}
+                >
+                  {isPlaceholder ? (
+                    <div className="block bg-white rounded-2xl p-4 border border-gray-100">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-4 flex-1">
-                          <AssetIcon
-                            logo=""
-                            name={asset.name}
-                            assetType={asset.assetType}
-                            size="md"
-                          />
+                          <div className="w-14 h-14 rounded-2xl bg-gray-100 animate-pulse" />
 
                           <div className="flex-1">
-                            <div className="flex items-center gap-2">
-                              <span className="font-semibold text-gray-900 tracking-tight">
-                                {asset.symbol}
-                              </span>
-                              <motion.div
-                                animate={{ scale: [1, 1.2, 1] }}
-                                transition={{
-                                  duration: 2,
-                                  repeat: Infinity,
-                                }}
-                              >
-                                <Circle
-                                  className={`w-2 h-2 fill-current ${getStatusColor(asset.status)}`}
-                                />
-                              </motion.div>
+                            <div className="font-semibold text-gray-900 tracking-tight">
+                              {asset.symbol}
                             </div>
-                            <div className="text-sm text-gray-500 mt-0.5">
-                              {getStatusLabel(asset.status)}
+                            <div className="text-sm text-gray-400 mt-0.5">
+                              Chargement...
                             </div>
                           </div>
 
                           <div className="text-right">
-                            <div className="font-semibold text-gray-900 tracking-tight">
-                              {asset.currentPrice.toFixed(2)}€
-                            </div>
+                            <div className="h-5 w-16 bg-gray-100 rounded-md animate-pulse" />
                           </div>
                         </div>
 
-                        <ArrowRight className="w-5 h-5 text-gray-400 ml-4" />
+                        <div className="w-5 h-5 ml-4 bg-gray-100 rounded-md animate-pulse" />
                       </div>
                     </div>
-                  </Link>
-                )}
-              </motion.div>
-                );
-              })}
+                  ) : (
+                    <Link to={`/asset/${encodeURIComponent(asset.id)}`}>
+                      <div className="block bg-white rounded-2xl p-4 border border-gray-100 active:bg-gray-50 transition-colors">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-4 flex-1">
+                            <AssetIcon
+                              logo=""
+                              name={asset.name}
+                              assetType={asset.assetType}
+                              size="md"
+                            />
+
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2">
+                                <span className="font-semibold text-gray-900 tracking-tight">
+                                  {asset.symbol}
+                                </span>
+                                <motion.div
+                                  animate={{ scale: [1, 1.2, 1] }}
+                                  transition={{
+                                    duration: 2,
+                                    repeat: Infinity,
+                                  }}
+                                >
+                                  <Circle
+                                    className={`w-2 h-2 fill-current ${getStatusColor(asset.status)}`}
+                                  />
+                                </motion.div>
+                              </div>
+                              <div className="text-sm text-gray-500 mt-0.5">
+                                {getStatusLabel(asset.status)}
+                              </div>
+                            </div>
+
+                            <div className="text-right">
+                              <div className="font-semibold text-gray-900 tracking-tight">
+                                {asset.currentPrice.toFixed(2)}€
+                              </div>
+                            </div>
+                          </div>
+
+                          <ArrowRight className="w-5 h-5 text-gray-400 ml-4" />
+                        </div>
+                      </div>
+                    </Link>
+                  )}
+                </motion.div>
+              );
+            })}
         </div>
         {visibleCount < favorites.length && (
           <div ref={loadMoreRef} className="h-10" />

@@ -204,7 +204,12 @@ function getPlanLabel(plan: UserPlan): string {
 }
 
 export function Library() {
-  const { addFavorite, removeFavorite, isFavorite } = useFavorites();
+  const { addFavorite, removeFavorite, isFavorite, favorites } = useFavorites() as {
+    addFavorite: (assetId: string) => Promise<void>;
+    removeFavorite: (assetId: string) => Promise<void>;
+    isFavorite: (assetId: string) => boolean;
+    favorites?: string[];
+  };
   const { trigger } = useWebHaptics();
   const triggerAssetTap = () => trigger("light");
   const triggerFavoriteTap = () => trigger("success");
@@ -213,6 +218,9 @@ export function Library() {
   const [optimisticFavorites, setOptimisticFavorites] = useState<Record<string, boolean>>({});
   const [favoriteBursts, setFavoriteBursts] = useState<Record<string, number>>({});
   const lastFavoriteActionRef = useRef<Record<string, number>>({});
+
+  const [favoriteLimitToastVisible, setFavoriteLimitToastVisible] = useState(false);
+  const favoriteLimitToastTimeoutRef = useRef<number | null>(null);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<AssetType | "all">("all");
@@ -240,6 +248,21 @@ export function Library() {
       : isFavorite(assetId);
   };
 
+  const showFavoriteLimitToast = () => {
+    setFavoriteLimitToastVisible(true);
+
+    if (favoriteLimitToastTimeoutRef.current) {
+      window.clearTimeout(favoriteLimitToastTimeoutRef.current);
+    }
+
+    favoriteLimitToastTimeoutRef.current = window.setTimeout(() => {
+      setFavoriteLimitToastVisible(false);
+      favoriteLimitToastTimeoutRef.current = null;
+    }, 2000);
+  };
+
+  const favoriteCount = Array.isArray(favorites) ? favorites.length : 0;
+
   const toggleWatchlist = async (assetId: string, e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -255,6 +278,12 @@ export function Library() {
 
     const currentValue = getFavoriteState(assetId);
     const nextValue = !currentValue;
+
+    if (nextValue && !currentValue && favoriteCount >= 15) {
+      showFavoriteLimitToast();
+      return;
+    }
+
     const actionId = (lastFavoriteActionRef.current[assetId] || 0) + 1;
     lastFavoriteActionRef.current[assetId] = actionId;
 
@@ -286,6 +315,13 @@ export function Library() {
       });
     } catch (error) {
       console.error("Error toggling favorite:", error);
+
+      const errorMessage =
+        error instanceof Error ? error.message : String(error || "");
+
+      if (nextValue && errorMessage.toLowerCase().includes("maximum 15 favorites allowed")) {
+        showFavoriteLimitToast();
+      }
 
       if (lastFavoriteActionRef.current[assetId] !== actionId) {
         return;
@@ -387,6 +423,14 @@ export function Library() {
       window.clearTimeout(timeout);
     };
   }, [searchQuery, selectedCategory]);
+
+  useEffect(() => {
+    return () => {
+      if (favoriteLimitToastTimeoutRef.current) {
+        window.clearTimeout(favoriteLimitToastTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const filteredAssets = useMemo(() => {
     return assets.filter((asset) => {
@@ -731,6 +775,22 @@ export function Library() {
             })}
           </div>
         )}
+
+        <AnimatePresence>
+          {favoriteLimitToastVisible && (
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 16 }}
+              transition={{ duration: 0.2 }}
+              className="fixed left-1/2 bottom-24 z-50 -translate-x-1/2 px-4 w-[calc(100%-2rem)] max-w-sm"
+            >
+              <div className="rounded-2xl bg-gray-900/95 text-white shadow-2xl px-4 py-3 text-sm font-medium backdrop-blur-md border border-white/10 text-center">
+                Maximum 15 favoris autorisés.
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </PageTransition>
   );
