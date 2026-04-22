@@ -31,7 +31,7 @@ export function Layout() {
         animate={{ y: 0 }}
         transition={{ duration: 0.6, ease: [0.25, 0.46, 0.45, 0.94] }}
       >
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="max-w-7xl mx-auto px-4 pb-3 sm:px-6 lg:px-8">
           <div className="grid grid-cols-3 items-stretch h-20">
             <Link
               to="/home"

@@ -1054,7 +1054,7 @@ export function AssetDetail() {
         </motion.div>
 
         <motion.div
-          className="pb-5 mb-6 mt-6 ms-3"
+          className="pb-5 mb-4"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2, duration: 0.5 }}
@@ -1072,16 +1072,15 @@ export function AssetDetail() {
                 </linearGradient>
               </defs>
 
-              <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
+              <CartesianGrid strokeDasharray="3 3" stroke="#e2e2e2a1" />
 
               <XAxis
-                hide
                 dataKey="date"
-                // tick={{ fontSize: 11, fill: "#9ca3af" }}
-                // tickFormatter={(value) => {
-                //   const date = new Date(value);
-                //   return `${date.getDate()}/${date.getMonth() + 1}`;
-                // }}
+                tick={{ fontSize: 11, fill: "#9ca3af" }}
+                tickFormatter={(value) => {
+                  const date = new Date(value);
+                  return `${date.getDate()}/${date.getMonth() + 1}`;
+                }}
               />
 
               <YAxis

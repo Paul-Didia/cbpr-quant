@@ -540,11 +540,21 @@ def cbpr_analyze_historical(
     df = compute_pivot_levels(df)
     df = compute_daily_delta(df)
 
-    base = symbol.split("/")[0].upper()
-    crypto = ["BTC", "ETH", "SOL", "ADA", "XRP", "BNB", "DOGE", "DOT"]
+    base = symbol.split("/")[0].split(":")[-1].upper()
 
-    if base in crypto:
-        margin = 0.15
+    crypto_margins = {
+        "BTC": 0.06,
+        "ETH": 0.08,
+        "SOL": 0.10,
+        "BNB": 0.10,
+        "ADA": 0.10,
+        "XRP": 0.10,
+        "DOGE": 0.10,
+        "DOT": 0.10,
+    }
+
+    if base in crypto_margins:
+        margin = crypto_margins[base]
     elif "/" in symbol and (exchange or "").lower() == "forex":
         margin = 0.02
     elif is_etf(symbol, asset_name, exchange):
