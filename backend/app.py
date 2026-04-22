@@ -512,9 +512,26 @@ def analysis(
         )
 
         enriched_values = []
+        chart_values = analysis_data.get("chart")
         df = analysis_data.get("dataframe")
 
-        if df is not None:
+        if isinstance(chart_values, list) and chart_values:
+            enriched_values = [
+                {
+                    "datetime": item.get("datetime", ""),
+                    "open": item.get("open"),
+                    "high": item.get("high"),
+                    "low": item.get("low"),
+                    "close": item.get("close"),
+                    "SMA200": item.get("sma200"),
+                    "SMA200_upper": item.get("sma200Upper"),
+                    "SMA200_lower": item.get("sma200Lower"),
+                    "pivot_support": item.get("pivotSupport"),
+                    "pivot_resistance": item.get("pivotResistance"),
+                }
+                for item in chart_values
+            ]
+        elif df is not None:
             enriched_values = [
                 {
                     "datetime": row["datetime"].isoformat() if row.get("datetime") is not None else "",
@@ -525,6 +542,8 @@ def analysis(
                     "SMA200": float(row["SMA200"]) if row.get("SMA200") is not None and row.get("SMA200") == row.get("SMA200") else None,
                     "SMA200_upper": float(row["SMA200_upper"]) if row.get("SMA200_upper") is not None and row.get("SMA200_upper") == row.get("SMA200_upper") else None,
                     "SMA200_lower": float(row["SMA200_lower"]) if row.get("SMA200_lower") is not None and row.get("SMA200_lower") == row.get("SMA200_lower") else None,
+                    "pivot_support": float(row["pivot_support"]) if row.get("pivot_support") is not None and row.get("pivot_support") == row.get("pivot_support") else None,
+                    "pivot_resistance": float(row["pivot_resistance"]) if row.get("pivot_resistance") is not None and row.get("pivot_resistance") == row.get("pivot_resistance") else None,
                 }
                 for _, row in df.iterrows()
             ]
@@ -533,7 +552,7 @@ def analysis(
             "symbol": symbol,
             "interval": interval,
             "subscription": plan,
-            "analysis": {k: v for k, v in analysis_data.items() if k != "dataframe"},
+            "analysis": {k: v for k, v in analysis_data.items() if k not in {"dataframe", "chart"}},
             "values": enriched_values,
             "meta": ts_data.get("meta", {}),
             "quote": quote_data,

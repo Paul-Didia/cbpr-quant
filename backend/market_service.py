@@ -4,9 +4,18 @@ import os
 from typing import Any, Optional
 
 import requests
+from requests.adapters import HTTPAdapter
 
 
 BASE_URL = "https://api.twelvedata.com"
+
+DEFAULT_TIMEOUT = 20
+DEFAULT_OUTPUTSIZE = 240
+
+_session = requests.Session()
+_adapter = HTTPAdapter(pool_connections=10, pool_maxsize=10)
+_session.mount("https://", _adapter)
+_session.mount("http://", _adapter)
 
 
 class TwelveDataError(Exception):
@@ -24,7 +33,7 @@ def _get(endpoint: str, params: Optional[dict[str, Any]] = None) -> dict[str, An
     query = dict(params or {})
     query["apikey"] = _api_key()
 
-    response = requests.get(f"{BASE_URL}/{endpoint}", params=query, timeout=20)
+    response = _session.get(f"{BASE_URL}/{endpoint}", params=query, timeout=DEFAULT_TIMEOUT)
     response.raise_for_status()
     data = response.json()
 
@@ -46,12 +55,12 @@ def get_logo(symbol: str) -> dict[str, Any]:
     return _get("logo", {"symbol": symbol})
 
 
-def get_time_series(symbol: str, interval: str = "4h", outputsize: int = 300) -> dict[str, Any]:
+def get_time_series(symbol: str, interval: str = "4h", outputsize: int = DEFAULT_OUTPUTSIZE) -> dict[str, Any]:
     return _get(
         "time_series",
         {
             "symbol": symbol,
             "interval": interval,
-            "outputsize": outputsize,
+            "outputsize": max(200, int(outputsize)),
         },
     )

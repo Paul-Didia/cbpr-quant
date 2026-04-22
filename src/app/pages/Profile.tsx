@@ -210,16 +210,16 @@ export function Profile() {
                   <span className="text-gray-700">150 actions disponibles</span>
                 </div>
                 <div className="flex items-center gap-2 text-sm">
-                  <X className="w-4 h-4 text-red-500" strokeWidth={2.5} />
-                  <span className="text-gray-500">Pas d'ETF</span>
+                  <Check className="w-4 h-4 text-green-600" strokeWidth={2.5} />
+                  <span className="text-gray-700">5 ETF disponibles</span>
                 </div>
                 <div className="flex items-center gap-2 text-sm">
                   <X className="w-4 h-4 text-red-500" strokeWidth={2.5} />
                   <span className="text-gray-500">Pas de Forex</span>
                 </div>
                 <div className="flex items-center gap-2 text-sm">
-                  <X className="w-4 h-4 text-red-500" strokeWidth={2.5} />
-                  <span className="text-gray-500">Pas de Crypto</span>
+                  <Check className="w-4 h-4 text-green-600" strokeWidth={2.5} />
+                  <span className="text-gray-700">5 Crypto disponibles</span>
                 </div>
               </div>
             </motion.div>
@@ -265,15 +265,15 @@ export function Profile() {
                 </div>
                 <div className="flex items-center gap-2 text-sm">
                   <Check className="w-4 h-4 text-green-600" strokeWidth={2.5} />
-                  <span className="text-gray-700">Tous les ETF</span>
+                  <span className="text-gray-700">10 ETF disponibles</span>
                 </div>
                 <div className="flex items-center gap-2 text-sm">
                   <X className="w-4 h-4 text-red-500" strokeWidth={2.5} />
                   <span className="text-gray-500">Pas de Forex</span>
                 </div>
                 <div className="flex items-center gap-2 text-sm">
-                  <X className="w-4 h-4 text-red-500" strokeWidth={2.5} />
-                  <span className="text-gray-500">Pas de Crypto</span>
+                  <Check className="w-4 h-4 text-green-600" strokeWidth={2.5} />
+                  <span className="text-gray-700">10 Crypto disponibles</span>
                 </div>
               </div>
               

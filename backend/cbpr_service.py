@@ -11,19 +11,19 @@ def _to_dataframe(time_series_data: dict[str, Any]) -> pd.DataFrame:
     if not values:
         return pd.DataFrame()
 
-    df = pd.DataFrame(values).copy()
+    df = pd.DataFrame(values)
 
     if "datetime" in df.columns:
         df["datetime"] = pd.to_datetime(df["datetime"])
 
     for col in ["open", "high", "low", "close"]:
         if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors="coerce")
+            df[col] = pd.to_numeric(df[col], errors="coerce", downcast="float")
 
     if "volume" in df.columns:
-        df["volume"] = pd.to_numeric(df["volume"], errors="coerce").fillna(0.0)
+        df["volume"] = pd.to_numeric(df["volume"], errors="coerce", downcast="float").fillna(0.0)
     else:
-        df["volume"] = 0.0
+        df["volume"] = np.float32(0.0)
 
     df = df.dropna(subset=["close"]).sort_values("datetime").reset_index(drop=True)
     return df
@@ -154,8 +154,8 @@ def compute_pivot_levels(df: pd.DataFrame, window: int = 3) -> pd.DataFrame:
             if local_lows.count(current_low) == 1:
                 pivot_lows[i] = float(current_low)
 
-    df["pivot_high"] = pd.Series(pivot_highs, index=df.index, dtype="float64")
-    df["pivot_low"] = pd.Series(pivot_lows, index=df.index, dtype="float64")
+    df["pivot_high"] = pd.Series(pivot_highs, index=df.index, dtype="float32")
+    df["pivot_low"] = pd.Series(pivot_lows, index=df.index, dtype="float32")
     df["pivot_resistance"] = df["pivot_high"].ffill()
     df["pivot_support"] = df["pivot_low"].ffill()
     return df
@@ -531,7 +531,7 @@ def cbpr_analyze_historical(
     asset_name: str = "",
     exchange: str = "",
 ):
-    df = df_4h.copy()
+    df = df_4h
     df["RSI"] = compute_rsi_series(df["close"])
     df = compute_bbands(df)
     df = compute_macd(df)
@@ -603,6 +603,26 @@ def cbpr_analyze_historical(
 
     df["below_sma200_days"] = below_sma_days
     df["buy_zone_days"] = buy_zone_days
+
+    float_cols = [
+        "RSI",
+        "BB_upper",
+        "BB_lower",
+        "BB_middle",
+        "MACD",
+        "Signal",
+        "SMA200",
+        "SMA200_upper",
+        "SMA200_lower",
+        "pivot_high",
+        "pivot_low",
+        "pivot_support",
+        "pivot_resistance",
+        "delta_pct",
+    ]
+    for col in float_cols:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce", downcast="float")
 
     signals = []
 
@@ -679,6 +699,44 @@ def analyze_cbpr(
         bollinger_zone = "Zone neutre"
     explanation = build_cbpr_explanation(latest, signal, score, bollinger_zone)
 
+    chart_df = df[
+        [
+            "datetime",
+            "open",
+            "high",
+            "low",
+            "close",
+            "SMA200",
+            "SMA200_upper",
+            "SMA200_lower",
+            "pivot_support",
+            "pivot_resistance",
+        ]
+    ].tail(180)
+
+    chart = [
+        {
+            "datetime": row["datetime"].isoformat(),
+            "open": None if pd.isna(row["open"]) else float(row["open"]),
+            "high": None if pd.isna(row["high"]) else float(row["high"]),
+            "low": None if pd.isna(row["low"]) else float(row["low"]),
+            "close": None if pd.isna(row["close"]) else float(row["close"]),
+            "sma200": None if pd.isna(row["SMA200"]) else float(row["SMA200"]),
+            "sma200Upper": None if pd.isna(row["SMA200_upper"]) else float(row["SMA200_upper"]),
+            "sma200Lower": None if pd.isna(row["SMA200_lower"]) else float(row["SMA200_lower"]),
+            "pivotSupport": None if pd.isna(row["pivot_support"]) else float(row["pivot_support"]),
+            "pivotResistance": None if pd.isna(row["pivot_resistance"]) else float(row["pivot_resistance"]),
+        }
+        for _, row in chart_df.iterrows()
+    ]
+
+    legacy_dataframe = chart_df.rename(
+        columns={
+            "pivot_support": "pivot_support",
+            "pivot_resistance": "pivot_resistance",
+        }
+    ).copy()
+
     return {
         "signal": signal,
         "score": score,
@@ -702,18 +760,6 @@ def analyze_cbpr(
             "pivotResistance": float(latest["pivot_resistance"]) if pd.notna(latest.get("pivot_resistance")) else None,
             "bollingerZone": bollinger_zone,
         },
-        "dataframe": df[
-            [
-                "datetime",
-                "open",
-                "high",
-                "low",
-                "close",
-                "SMA200",
-                "SMA200_upper",
-                "SMA200_lower",
-                "pivot_support",
-                "pivot_resistance",
-            ]
-        ].copy(),
+        "chart": chart,
+        "dataframe": legacy_dataframe,
     }
