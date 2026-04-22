@@ -50,6 +50,24 @@ FREE_STOCK_SYMBOLS = {
     "PDD","TCEHY","BIDU","SE","MELI","TSM","INFY","SAP","ORAN","VOD"
 }
 
+FREE_CRYPTO_SYMBOLS = {
+    "BTC/USD", "ETH/USD", "SOL/USD", "XRP/USD", "BNB/USD"
+}
+
+PRO_CRYPTO_SYMBOLS = {
+    "ADA/USD", "DOGE/USD", "AVAX/USD", "LINK/USD", "DOT/USD",
+    "TRX/USD", "TON/USD", "MATIC/USD", "SHIB/USD", "BCH/USD"
+}
+
+FREE_ETF_SYMBOLS = {
+    "SPY", "QQQ", "VTI", "IVV", "VT"
+}
+
+PRO_ETF_SYMBOLS = {
+    "IWM", "DIA", "XLK", "VEA", "EEM",
+    "VWO", "XLF", "XLE", "ARKK", "VNQ"
+}
+
 app = FastAPI(title="CBPR Quant Backend", version="1.0.0")
 
 ENV = os.getenv("ENV", "dev").strip().lower() or "dev"
@@ -213,11 +231,22 @@ def get_required_plan_for_symbol(symbol: str, quote_data: dict[str, Any]) -> str
     asset_type = infer_asset_type(symbol, quote_data)
     normalized_symbol = normalize_access_symbol(symbol)
 
-    if asset_type in {"crypto", "forex"}:
+    if asset_type == "forex":
+        return "quant"
+
+    if asset_type == "crypto":
+        if normalized_symbol in FREE_CRYPTO_SYMBOLS:
+            return "free"
+        if normalized_symbol in PRO_CRYPTO_SYMBOLS:
+            return "pro"
         return "quant"
 
     if asset_type == "etf":
-        return "pro"
+        if normalized_symbol in FREE_ETF_SYMBOLS:
+            return "free"
+        if normalized_symbol in PRO_ETF_SYMBOLS:
+            return "pro"
+        return "quant"
 
     if asset_type == "stock":
         return "free" if normalized_symbol in FREE_STOCK_SYMBOLS else "pro"

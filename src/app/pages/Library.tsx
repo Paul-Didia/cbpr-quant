@@ -39,6 +39,24 @@ const FREE_STOCK_SYMBOLS = new Set([
   "PDD", "TCEHY", "BIDU", "SE", "MELI", "TSM", "INFY", "SAP", "ORAN", "VOD"
 ]);
 
+const FREE_CRYPTO_SYMBOLS = new Set([
+  "BTC/USD", "ETH/USD", "SOL/USD", "XRP/USD", "BNB/USD",
+]);
+
+const PRO_CRYPTO_SYMBOLS = new Set([
+  "ADA/USD", "DOGE/USD", "AVAX/USD", "LINK/USD", "DOT/USD",
+  "TRX/USD", "TON/USD", "MATIC/USD", "SHIB/USD", "BCH/USD",
+]);
+
+const FREE_ETF_SYMBOLS = new Set([
+  "SPY", "QQQ", "VTI", "IVV", "VT",
+]);
+
+const PRO_ETF_SYMBOLS = new Set([
+  "IWM", "DIA", "XLK", "VEA", "EEM",
+  "VWO", "XLF", "XLE", "ARKK", "VNQ",
+]);
+
 const LIBRARY_CACHE_KEY = "cbpr_library_cache_v1";
 
 function normalizeAssetType(
@@ -142,12 +160,20 @@ function normalizeAccessSymbol(symbol?: string) {
 function getRequiredPlanForAsset(asset: LibraryAsset): UserPlan {
   const symbol = normalizeAccessSymbol(asset.symbol);
 
-  if (asset.assetType === "crypto" || asset.assetType === "forex") {
+  if (asset.assetType === "forex") {
+    return "quant";
+  }
+
+  if (asset.assetType === "crypto") {
+    if (FREE_CRYPTO_SYMBOLS.has(symbol)) return "free";
+    if (PRO_CRYPTO_SYMBOLS.has(symbol)) return "pro";
     return "quant";
   }
 
   if (asset.assetType === "etf") {
-    return "pro";
+    if (FREE_ETF_SYMBOLS.has(symbol)) return "free";
+    if (PRO_ETF_SYMBOLS.has(symbol)) return "pro";
+    return "quant";
   }
 
   if (asset.assetType === "stock") {
@@ -374,9 +400,9 @@ export function Library() {
   const categories = [
     { id: "all" as const, label: "Tous", icon: "⟡" },
     { id: "stock" as const, label: "Actions", icon: "$" },
+    { id: "crypto" as const, label: "Crypto", icon: "฿" },
     { id: "etf" as const, label: "ETF", icon: "E" },
     { id: "forex" as const, label: "Forex", icon: "£" },
-    { id: "crypto" as const, label: "Crypto", icon: "฿" },
   ];
 
 

@@ -65,7 +65,7 @@ export function Profile() {
   };
 
   const hasWhatsappAccess = displayedPlan === 'pro' || displayedPlan === 'quant';
-  const whatsappUrl = 'https://chat.whatsapp.com/ERFWl37TBNJJJjuqUwjx15?mode=gi_t';
+  const whatsappUrl = 'https://buy.stripe.com/eVqbJ1dBcafK1D06YGasg06';
   const stripeProUrl = 'https://buy.stripe.com/5kQ5kD8gScnSbdAdn4asg05';
   const stripeQuantUrl = 'https://buy.stripe.com/6oUfZhgNo87C5Tgdn4asg03';
   const stripeBillingUrl = 'https://billing.stripe.com/p/login/00w7sL1Su73y5Tgfvcasg00';
@@ -390,7 +390,7 @@ export function Profile() {
           <br />
           <br />
 
-        {/* CBPR Capital Community */}
+        {/* Cercle CBPR Capital */}
         <motion.div 
           className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-3xl p-6 mb-6 shadow-lg relative overflow-hidden"
           initial={{ opacity: 0, y: 20 }}
@@ -424,62 +424,43 @@ export function Profile() {
               
               <div className="flex-1">
                 <h2 className="font-semibold text-white text-lg tracking-tight mb-1">
-                  Rejoignez le Chat CBPR Capital
+                  Rejoignez le Cercle CBPR Capital
                 </h2>
                 <p className="text-blue-100 text-sm leading-relaxed">
-                  Participez à notre cercle d'investisseurs exclusif et profitez des analyses 
-                  en temps réel de nos analystes les plus chevronnés.
+                  Intégrez notre cercle d’investisseurs CBPR Capital et accédez à une vision marché structurée, pensée pour les investisseurs qui veulent aller plus loin.
                 </p>
               </div>
             </div>
 
             <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-4 mb-4">
-              <ul className="space-y-2 text-sm text-blue-50">
+              <ul className="space-y-3 text-lg text-blue-50">
                 <li className="flex items-center gap-2">
                   <Check className="w-4 h-4 text-blue-200" strokeWidth={2.5} />
-                  <span>Analyses quotidiennes des marchés</span>
+                  <span>Performance annuelle moyenne observée : +24%</span>
                 </li>
                 <li className="flex items-center gap-2">
                   <Check className="w-4 h-4 text-blue-200" strokeWidth={2.5} />
-                  <span>Échanges avec des investisseurs expérimentés</span>
+                  <span>Accès au cercle privé CBPR Capital</span>
                 </li>
                 <li className="flex items-center gap-2">
                   <Check className="w-4 h-4 text-blue-200" strokeWidth={2.5} />
-                  <span>Alertes sur les opportunités d'achat</span>
+                  <span>Adhésion annuelle : 120€</span>
                 </li>
               </ul>
             </div>
 
-            {hasWhatsappAccess ? (
-              <motion.a
-                href={whatsappUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="w-full bg-white text-blue-600 py-3.5 rounded-2xl font-semibold shadow-lg flex items-center justify-center gap-2"
-                whileHover={{ scale: 1.02, y: -2 }}
-                whileTap={{ scale: 0.98 }}
-                transition={{ type: "spring", stiffness: 400, damping: 17 }}
-              >
-                <MessageCircle className="w-5 h-5" />
-                Accéder au chat WhatsApp
-              </motion.a>
-            ) : (
-              <div>
-                <motion.button
-                  type="button"
-                  className="w-full bg-white/80 text-blue-400 py-3.5 rounded-2xl font-semibold shadow-lg flex items-center justify-center gap-2 cursor-not-allowed"
-                  whileTap={{ scale: 0.98 }}
-                  transition={{ type: "spring", stiffness: 400, damping: 17 }}
-                  disabled
-                >
-                  <MessageCircle className="w-5 h-5" />
-                  Accès réservé aux abonnés Pro et Quant
-                </motion.button>
-                <p className="text-xs text-blue-100 mt-3 text-center">
-                  Passez à Pro ou Quant pour rejoindre le groupe WhatsApp CBPR Capital.
-                </p>
-              </div>
-            )}
+            <motion.a
+              href={whatsappUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="w-full bg-white text-blue-600 py-3.5 rounded-2xl font-semibold shadow-lg flex items-center justify-center gap-2"
+              whileHover={{ scale: 1.02, y: -2 }}
+              whileTap={{ scale: 0.98 }}
+              transition={{ type: "spring", stiffness: 400, damping: 17 }}
+            >
+              <MessageCircle className="w-5 h-5" />
+              Rejoindre le Cercle CBPR Capital
+            </motion.a>
           </div>
         </motion.div>
 
