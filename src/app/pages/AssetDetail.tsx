@@ -1,5 +1,5 @@
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { ArrowLeft, ExternalLink, HelpCircle, Star, X } from "lucide-react";
+import { ArrowLeft, ExternalLink, HelpCircle, Star, X, Share } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "motion/react";
 import { PageTransition } from "../components/PageTransition";
@@ -1002,15 +1002,36 @@ export function AssetDetail() {
             />
           </motion.div>
           <div>
-            <h1
-              className="text-[32px] font-semibold text-gray-900 tracking-tight"
-              style={{
-                fontFamily:
-                  '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif',
-              }}
-            >
-              {asset.symbol}
-            </h1>
+            <div className="flex items-center justify-between w-full">
+              <h1
+                className="text-[32px] font-semibold text-gray-900 tracking-tight"
+                style={{
+                  fontFamily:
+                    '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif',
+                }}
+              >
+                {asset.symbol}
+              </h1>
+
+              <button
+                onClick={() => {
+                  const url = window.location.href;
+                  if (navigator.share) {
+                    navigator.share({
+                      title: `${asset.symbol} - CBPR Quant`,
+                      text: `Analyse CBPR de ${asset.symbol}`,
+                      url,
+                    });
+                  } else {
+                    navigator.clipboard.writeText(url);
+                    alert("Lien copié !");
+                  }
+                }}
+                className="p-2 rounded-full hover:bg-gray-100 transition-all"
+              >
+                <Share className="w-5 h-5 text-gray-400" />
+              </button>
+            </div>
             <p className="text-gray-600">{asset.name}</p>
             <p className="text-sm text-gray-500 mt-1">
               {asset.exchange || "Marché non renseigné"}
