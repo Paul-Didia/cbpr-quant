@@ -391,7 +391,7 @@ export function Home() {
         </motion.h1>
 
         <div className="flex items-center justify-between text-xs text-gray-400 mb-4 tracking-wide">
-          <span>Analyse temps réel</span>
+          <span>Analyse temps réel 4H</span>
         </div>
 
         <div className="space-y-3">
