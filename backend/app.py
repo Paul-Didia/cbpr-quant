@@ -495,6 +495,7 @@ def asset(
         return {
             "quote": normalize_quote_item(quote_data),
             "logo": "",
+            "assetType": infer_asset_type(symbol, quote_data),
             "subscription": plan,
         }
     except HTTPException:
@@ -517,6 +518,9 @@ def analysis(
         quote_data = get_quote(symbol)
         plan = enforce_symbol_access(symbol, quote_data, authorization, x_user_email)
         ts_data = get_time_series(symbol, interval=interval, outputsize=outputsize)
+
+        normalized_quote = normalize_quote_item(quote_data)
+        asset_type = infer_asset_type(symbol, quote_data)
 
         analysis_data = analyze_cbpr(
             ts_data,
@@ -566,10 +570,12 @@ def analysis(
             "symbol": symbol,
             "interval": interval,
             "subscription": plan,
+            "logo": "",
+            "assetType": asset_type,
             "analysis": {k: v for k, v in analysis_data.items() if k not in {"dataframe", "chart"}},
             "values": enriched_values,
             "meta": ts_data.get("meta", {}),
-            "quote": quote_data,
+            "quote": normalized_quote,
         }
     except HTTPException:
         raise
