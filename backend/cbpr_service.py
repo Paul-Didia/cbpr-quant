@@ -565,15 +565,20 @@ def cbpr_analyze_historical(
     df["SMA200_upper"] = df["SMA200"] * (1 + margin)
     df["SMA200_lower"] = df["SMA200"] * (1 - margin)
 
-    def get_signal_direction(row):
-        if pd.isna(row["SMA200"]):
-            return "neutre"
-        if row["SMA200_lower"] <= row["close"] <= row["SMA200_upper"]:
-            return "neutre"
-        return "achat" if row["close"] < row["SMA200"] else "vente"
+    # Vectorized direction computation (much faster than df.apply on every request)
+    df["direction"] = "neutre"
 
+    valid_sma_mask = pd.notna(df["SMA200"])
+    outside_channel_mask = ~(
+        (df["close"] >= df["SMA200_lower"]) &
+        (df["close"] <= df["SMA200_upper"])
+    )
 
-    df["direction"] = df.apply(get_signal_direction, axis=1)
+    achat_mask = valid_sma_mask & outside_channel_mask & (df["close"] < df["SMA200"])
+    vente_mask = valid_sma_mask & outside_channel_mask & (df["close"] >= df["SMA200"])
+
+    df.loc[achat_mask, "direction"] = "achat"
+    df.loc[vente_mask, "direction"] = "vente"
     df["channel_direction"] = df["sma200_trend_direction"]
 
     # 🆕 Durée passée sous la SMA200 et en zone d'achat, en jours de bourse consécutifs
@@ -636,7 +641,11 @@ def cbpr_analyze_historical(
 
     signals = []
 
-    for _, row in df.iterrows():
+    # We only need recent signals for UI/history.
+    # Avoid scanning the full dataset on every API call.
+    recent_df = df.tail(180)
+
+    for _, row in recent_df.iterrows():
         if row["direction"] == "neutre":
             continue
 
@@ -709,6 +718,7 @@ def analyze_cbpr(
         bollinger_zone = "Zone neutre"
     explanation = build_cbpr_explanation(latest, signal, score, bollinger_zone)
 
+    # Keep API payload lighter: frontend only needs recent chart history
     chart_df = df[
         [
             "datetime",
