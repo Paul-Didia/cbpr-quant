@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, User, Mail, Bell, Crown, Zap, MessageCircle, TrendingUp, Check, X, LogOut } from 'lucide-react';
+import { ArrowLeft, User, Mail, Bell, Crown, Zap, MessageCircle, TrendingUp, Check, X, LogOut, MessagesSquare } from 'lucide-react';
 import { motion } from 'motion/react';
 import { PageTransition } from '../components/PageTransition';
 import { CbprMethode } from '../components/CbprMethode';
@@ -460,6 +460,79 @@ export function Profile() {
             >
               <MessageCircle className="w-5 h-5" />
               Rejoindre le Cercle CBPR Capital
+            </motion.a>
+          </div>
+        </motion.div>
+
+        {/* Forum CBPR Capital */}
+        <motion.div 
+          className="bg-gradient-to-br from-green-500 to-emerald-600 rounded-3xl p-6 mb-6 shadow-lg relative overflow-hidden"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.42, duration: 0.5 }}
+          whileHover={{ scale: 1.02, boxShadow: '0 20px 40px -10px rgb(34 197 94 / 0.4)' }}
+        >
+          <motion.div
+            className="absolute -top-10 -right-10 w-40 h-40 bg-white/10 rounded-full blur-2xl"
+            animate={{
+              scale: [1, 1.2, 1],
+              opacity: [0.3, 0.5, 0.3],
+            }}
+            transition={{
+              duration: 4,
+              repeat: Infinity,
+              ease: "easeInOut",
+            }}
+          />
+
+          <div className="relative z-10">
+            <div className="flex items-start gap-4 mb-4">
+              <motion.div
+                className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center"
+                whileHover={{ rotate: 5, scale: 1.1 }}
+                transition={{ type: "spring", stiffness: 400, damping: 17 }}
+              >
+                <MessagesSquare className="w-7 h-7 text-white" />
+              </motion.div>
+
+              <div className="flex-1">
+                <h2 className="font-semibold text-white text-lg tracking-tight mb-1">
+                  Rejoignez le Forum CBPR Capital
+                </h2>
+                <p className="text-green-100 text-sm leading-relaxed">
+                  Discutez avec la communauté CBPR, obtenez les dernières infos sur l’application, partagez vos retours et échangez sur l’économie et les marchés.
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-4 mb-4">
+              <ul className="space-y-3 text-lg text-green-50">
+                <li className="flex items-center gap-2">
+                  <Check className="w-4 h-4 text-green-200" strokeWidth={2.5} />
+                  <span>Actualités produit CBPR Quant</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="w-4 h-4 text-green-200" strokeWidth={2.5} />
+                  <span>Feedbacks & suggestions utilisateurs</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="w-4 h-4 text-green-200" strokeWidth={2.5} />
+                  <span>Discussions économie & marchés</span>
+                </li>
+              </ul>
+            </div>
+
+            <motion.a
+              href="https://chat.whatsapp.com/GlZieFF7sw5G9M525TcVyv?mode=gi_t"
+              target="_blank"
+              rel="noreferrer"
+              className="w-full bg-white text-green-600 py-3.5 rounded-2xl font-semibold shadow-lg flex items-center justify-center gap-2"
+              whileHover={{ scale: 1.02, y: -2 }}
+              whileTap={{ scale: 0.98 }}
+              transition={{ type: "spring", stiffness: 400, damping: 17 }}
+            >
+              <MessagesSquare className="w-5 h-5" />
+              Rejoindre le Forum CBPR Capital
             </motion.a>
           </div>
         </motion.div>
