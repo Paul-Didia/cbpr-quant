@@ -493,17 +493,20 @@ function mapToHomeAssetCache(asset: AssetDetailData) {
   };
 }
 
-function mapToAssetDetail(assetResponse: any, analysisResponse: any, symbol: string): AssetDetailData {
-  const quote = assetResponse?.quote || {};
+function mapToAssetDetail(analysisResponse: any, symbol: string): AssetDetailData {
+  const quote = analysisResponse?.quote || {};
   const analysis = analysisResponse?.analysis || {};
   const indicators = analysis?.indicators || {};
   const explanationData = analysis?.explanation || {};
   const status = mapSignalToStatus(analysis?.signal);
-  const assetType = normalizeAssetType(
-    quote?.instrument_type,
-    quote?.name || symbol,
-    quote?.exchange,
-  );
+  const backendAssetType = String(analysisResponse?.assetType || "");
+  const assetType = backendAssetType
+    ? normalizeAssetType(backendAssetType, quote?.name || symbol, quote?.exchange)
+    : normalizeAssetType(
+        quote?.instrument_type,
+        quote?.name || symbol,
+        quote?.exchange,
+      );
 
   const values = Array.isArray(analysisResponse?.values) ? analysisResponse.values : [];
 
@@ -576,7 +579,7 @@ function mapToAssetDetail(assetResponse: any, analysisResponse: any, symbol: str
     currentPrice,
     change,
     changePercent,
-    logo: String(assetResponse?.logo || ""),
+    logo: String(analysisResponse?.logo || ""),
     exchange,
     currency,
     status,
@@ -713,13 +716,10 @@ export function AssetDetail() {
       setErrorMessage("");
 
       try {
-        const [assetResponse, analysisResponse] = await Promise.all([
-          apiService.getAssetDetail(symbol),
-          apiService.getAnalysis(symbol),
-        ]);
+        const analysisResponse = await apiService.getAnalysis(symbol);
 
-        const mapped = mapToAssetDetail(assetResponse, analysisResponse, symbol);
-        const backendRequiredPlan = String(assetResponse?.subscription || "")
+        const mapped = mapToAssetDetail(analysisResponse, symbol);
+        const backendRequiredPlan = String(analysisResponse?.subscription || "")
           .trim()
           .toLowerCase();
 
