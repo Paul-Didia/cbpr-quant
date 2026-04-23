@@ -198,12 +198,9 @@ export function Home() {
         const refreshedResults = await Promise.all(
           symbolsToRefresh.map(async (symbol): Promise<HomeAsset | null> => {
             try {
-              const [assetResponse, analysisResponse] = await Promise.all([
-                apiService.getAssetDetail(symbol),
-                apiService.getAnalysis(symbol),
-              ]);
+              const analysisResponse = await apiService.getAnalysis(symbol);
 
-              const quote = assetResponse?.quote || {};
+              const quote = analysisResponse?.quote || {};
               const analysis = analysisResponse?.analysis || {};
               const cachedLibraryAsset = cachedLibrary.find((asset) => asset.id === symbol);
 
@@ -211,13 +208,15 @@ export function Home() {
               const exchange = String(quote?.exchange || "");
               const currentPrice = Number(quote?.price || 0);
               const signal = String(analysis?.signal || "NEUTRE");
+              const backendAssetType = String(analysisResponse?.assetType || "");
 
               const mappedAsset: HomeAsset = {
                 id: symbol,
                 symbol,
                 name,
-                logo: "",
+                logo: String(analysisResponse?.logo || ""),
                 assetType:
+                  (backendAssetType as AssetType) ||
                   cachedLibraryAsset?.assetType ||
                   inferAssetType(symbol, name, exchange),
                 currentPrice,
@@ -410,7 +409,7 @@ export function Home() {
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-4 flex-1">
                         <AssetIcon
-                          logo=""
+                          logo={asset.logo}
                           name={asset.name}
                           assetType={asset.assetType}
                           size="md"
