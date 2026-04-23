@@ -6,6 +6,7 @@ from typing import Any, Optional
 
 import requests
 from requests.adapters import HTTPAdapter
+from requests.exceptions import ConnectionError as RequestsConnectionError, RequestException
 
 
 BASE_URL = "https://api.twelvedata.com"
@@ -38,7 +39,7 @@ def _get_cached(endpoint: str, ttl_seconds: int, params: Optional[dict[str, Any]
     return payload
 
 _session = requests.Session()
-_adapter = HTTPAdapter(pool_connections=10, pool_maxsize=10)
+_adapter = HTTPAdapter(pool_connections=10, pool_maxsize=10, pool_block=False)
 _session.mount("https://", _adapter)
 _session.mount("http://", _adapter)
 
@@ -58,14 +59,33 @@ def _get(endpoint: str, params: Optional[dict[str, Any]] = None) -> dict[str, An
     query = dict(params or {})
     query["apikey"] = _api_key()
 
-    response = _session.get(f"{BASE_URL}/{endpoint}", params=query, timeout=DEFAULT_TIMEOUT)
-    response.raise_for_status()
-    data = response.json()
+    last_error: Optional[Exception] = None
 
-    if isinstance(data, dict) and data.get("status") == "error":
-        raise TwelveDataError(data.get("message", "Unknown Twelve Data error"))
+    for attempt in range(2):
+        try:
+            response = _session.get(
+                f"{BASE_URL}/{endpoint}",
+                params=query,
+                timeout=DEFAULT_TIMEOUT,
+                headers={"Connection": "close"},
+            )
+            response.raise_for_status()
+            data = response.json()
 
-    return data
+            if isinstance(data, dict) and data.get("status") == "error":
+                raise TwelveDataError(data.get("message", "Unknown Twelve Data error"))
+
+            return data
+        except TwelveDataError:
+            raise
+        except (RequestsConnectionError, RequestException) as exc:
+            last_error = exc
+            if attempt == 0:
+                time.sleep(0.25)
+                continue
+            raise TwelveDataError(str(exc)) from exc
+
+    raise TwelveDataError(str(last_error) if last_error else "Unknown Twelve Data request error")
 
 
 def search_assets(query: str) -> dict[str, Any]:
