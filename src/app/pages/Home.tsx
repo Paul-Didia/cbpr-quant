@@ -27,7 +27,8 @@ const LIBRARY_CACHE_KEY = "cbpr_library_cache_v1";
 const HOME_ASSET_CACHE_PREFIX = "cbpr_home_asset_";
 const HOME_CACHE_DURATION = 1000 * 60 * 60 * 4; // 4h
 const HOME_VISIBLE_BATCH = 5;
-const HOME_ANALYSIS_REQUEST_LIMIT = 7;
+const HOME_FETCH_CONCURRENCY = 4;
+const HOME_CACHE_SCOPE_KEY = "cbpr_home_cache_scope_v1";
 
 function getHomeAssetCacheKey(symbol: string) {
   return `${HOME_ASSET_CACHE_PREFIX}${encodeURIComponent(symbol)}`;
@@ -66,6 +67,23 @@ function removeCachedHomeAsset(symbol: string) {
   try {
     window.localStorage.removeItem(getHomeAssetCacheKey(symbol));
   } catch { }
+}
+
+function clearAllHomeAssetCache() {
+  try {
+    Object.keys(window.localStorage).forEach((key) => {
+      if (key.startsWith(HOME_ASSET_CACHE_PREFIX)) {
+        window.localStorage.removeItem(key);
+      }
+    });
+  } catch { }
+}
+
+function getFavoritesScope(favorites: string[]) {
+  return favorites
+    .map((item) => item.trim().toUpperCase())
+    .sort()
+    .join("|");
 }
 
 function inferAssetType(
@@ -161,6 +179,17 @@ export function Home() {
 
   useEffect(() => {
     setVisibleCount(HOME_VISIBLE_BATCH);
+    setWatchedAssets([]);
+
+    try {
+      const nextScope = getFavoritesScope(favorites);
+      const previousScope = window.sessionStorage.getItem(HOME_CACHE_SCOPE_KEY);
+
+      if (previousScope !== nextScope) {
+        clearAllHomeAssetCache();
+        window.sessionStorage.setItem(HOME_CACHE_SCOPE_KEY, nextScope);
+      }
+    } catch { }
   }, [favorites]);
 
   useEffect(() => {
@@ -209,7 +238,6 @@ export function Home() {
       try {
         const cachedLibrary = getCachedLibraryAssets();
         const visibleFavorites = favorites.slice(0, visibleCount);
-        const requestableFavorites = visibleFavorites.slice(0, HOME_ANALYSIS_REQUEST_LIMIT);
 
         const cachedAssetsMap = new Map<string, HomeAsset>();
         visibleFavorites.forEach((symbol) => {
@@ -219,50 +247,58 @@ export function Home() {
           }
         });
 
-        const symbolsToFetch = requestableFavorites.filter(
+        const symbolsToFetch = visibleFavorites.filter(
           (symbol) => !cachedAssetsMap.has(symbol),
         );
 
-        const fetchedResults = await Promise.all(
-          symbolsToFetch.map(async (symbol): Promise<HomeAsset | null> => {
-            try {
-              const [assetResponse, analysisResponse] = await Promise.all([
-                apiService.getAssetDetail(symbol),
-                apiService.getAnalysis(symbol),
-              ]);
+        const fetchedResults: Array<HomeAsset | null> = [];
 
-              const quote = assetResponse?.quote || {};
-              const analysis = analysisResponse?.analysis || {};
+        for (let i = 0; i < symbolsToFetch.length; i += HOME_FETCH_CONCURRENCY) {
+          const chunk = symbolsToFetch.slice(i, i + HOME_FETCH_CONCURRENCY);
 
-              const cachedLibraryAsset = cachedLibrary.find(
-                (asset) => asset.id === symbol
-              );
+          const chunkResults = await Promise.all(
+            chunk.map(async (symbol): Promise<HomeAsset | null> => {
+              try {
+                const [assetResponse, analysisResponse] = await Promise.all([
+                  apiService.getAssetDetail(symbol),
+                  apiService.getAnalysis(symbol),
+                ]);
 
-              const name = String(quote?.name || cachedLibraryAsset?.name || symbol);
-              const exchange = String(quote?.exchange || "");
-              const currentPrice = Number(quote?.price || 0);
-              const signal = String(analysis?.signal || "NEUTRE");
+                const quote = assetResponse?.quote || {};
+                const analysis = analysisResponse?.analysis || {};
 
-              const mappedAsset: HomeAsset = {
-                id: symbol,
-                symbol,
-                name,
-                logo: "",
-                assetType:
-                  cachedLibraryAsset?.assetType ||
-                  inferAssetType(symbol, name, exchange),
-                currentPrice,
-                status: mapSignalToStatus(signal),
-              };
+                const cachedLibraryAsset = cachedLibrary.find(
+                  (asset) => asset.id === symbol
+                );
 
-              setCachedHomeAsset(symbol, mappedAsset);
-              return mappedAsset;
-            } catch (error) {
-              console.error(`Error loading favorite ${symbol}:`, error);
-              return null;
-            }
-          }),
-        );
+                const name = String(quote?.name || cachedLibraryAsset?.name || symbol);
+                const exchange = String(quote?.exchange || "");
+                const currentPrice = Number(quote?.price || 0);
+                const signal = String(analysis?.signal || "NEUTRE");
+
+                const mappedAsset: HomeAsset = {
+                  id: symbol,
+                  symbol,
+                  name,
+                  logo: "",
+                  assetType:
+                    cachedLibraryAsset?.assetType ||
+                    inferAssetType(symbol, name, exchange),
+                  currentPrice,
+                  status: mapSignalToStatus(signal),
+                };
+
+                setCachedHomeAsset(symbol, mappedAsset);
+                return mappedAsset;
+              } catch (error) {
+                console.error(`Error loading favorite ${symbol}:`, error);
+                return null;
+              }
+            }),
+          );
+
+          fetchedResults.push(...chunkResults);
+        }
 
         fetchedResults.forEach((asset) => {
           if (asset) {
@@ -483,28 +519,30 @@ export function Home() {
                   transition={{ delay: index * 0.1, duration: 0.5 }}
                 >
                   {isPlaceholder ? (
-                    <div className="block bg-white rounded-2xl p-4 border border-gray-100">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-4 flex-1">
-                          <div className="w-14 h-14 rounded-2xl bg-gray-100 animate-pulse" />
+                    <Link to={`/asset/${encodeURIComponent(asset.id)}`}>
+                      <div className="block bg-white rounded-2xl p-4 border border-gray-100 active:bg-gray-50 transition-colors">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-4 flex-1">
+                            <div className="w-14 h-14 rounded-2xl bg-gray-100 animate-pulse" />
 
-                          <div className="flex-1">
-                            <div className="font-semibold text-gray-900 tracking-tight">
-                              {asset.symbol}
+                            <div className="flex-1">
+                              <div className="font-semibold text-gray-900 tracking-tight">
+                                {asset.symbol}
+                              </div>
+                              <div className="text-sm text-gray-400 mt-0.5">
+                                Chargement...
+                              </div>
                             </div>
-                            <div className="text-sm text-gray-400 mt-0.5">
-                              Chargement...
+
+                            <div className="text-right">
+                              <div className="h-5 w-16 bg-gray-100 rounded-md animate-pulse" />
                             </div>
                           </div>
 
-                          <div className="text-right">
-                            <div className="h-5 w-16 bg-gray-100 rounded-md animate-pulse" />
-                          </div>
+                          <ArrowRight className="w-5 h-5 text-gray-400 ml-4" />
                         </div>
-
-                        <div className="w-5 h-5 ml-4 bg-gray-100 rounded-md animate-pulse" />
                       </div>
-                    </div>
+                    </Link>
                   ) : (
                     <Link to={`/asset/${encodeURIComponent(asset.id)}`}>
                       <div className="block bg-white rounded-2xl p-4 border border-gray-100 active:bg-gray-50 transition-colors">
