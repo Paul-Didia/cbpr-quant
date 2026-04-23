@@ -750,10 +750,7 @@ export function AssetDetail() {
 
         if (!isCancelled) {
           setAsset(mapped);
-
-          if (isFavorite(mapped.id)) {
-            setCachedHomeAsset(mapped.symbol, mapToHomeAssetCache(mapped));
-          }
+          setCachedHomeAsset(mapped.symbol, mapToHomeAssetCache(mapped));
         }
       } catch (error) {
         console.error("Error loading asset detail:", error);
@@ -773,7 +770,7 @@ export function AssetDetail() {
     return () => {
       isCancelled = true;
     };
-  }, [symbol, currentPlan, isFavorite]);
+  }, [symbol, currentPlan]);
 
   useEffect(() => {
     return () => {
