@@ -29,7 +29,45 @@ PRICE_TO_PLAN = {
 
 SUPABASE_URL = os.getenv("SUPABASE_URL", "")
 SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", "") or os.getenv("SUPABASE_KEY", "")
+SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
+SUPABASE_MACRO_TABLE = os.getenv("SUPABASE_MACRO_TABLE", "macro_market_status")
 DEV_DEFAULT_PLAN = os.getenv("DEV_DEFAULT_PLAN", "quant").strip().lower() or "quant"
+def get_macro_statuses_from_supabase() -> list[dict[str, Any]]:
+    if not SUPABASE_URL:
+        raise HTTPException(status_code=503, detail="Supabase URL is not configured")
+
+    api_key = SUPABASE_SERVICE_ROLE_KEY or SUPABASE_ANON_KEY
+
+    if not api_key:
+        raise HTTPException(status_code=503, detail="Supabase API key is not configured")
+
+    try:
+        response = requests.get(
+            f"{SUPABASE_URL.rstrip('/')}/rest/v1/{SUPABASE_MACRO_TABLE}",
+            headers={
+                "apikey": api_key,
+                "Authorization": f"Bearer {api_key}",
+            },
+            params={
+                "select": "region,label,status,regime,source,value,error,updated_at",
+                "order": "region.asc",
+            },
+            timeout=10,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Macro status fetch error: {e}")
+
+    if response.status_code >= 400:
+        raise HTTPException(
+            status_code=response.status_code,
+            detail=f"Supabase macro status error: {response.text}",
+        )
+
+    data = response.json()
+    if not isinstance(data, list):
+        raise HTTPException(status_code=500, detail="Invalid macro status response from Supabase")
+
+    return data
 
 FREE_STOCK_SYMBOLS = {
     "AAPL","MSFT","AMZN","GOOGL","META","NVDA","TSLA","JPM","JNJ","V",
@@ -368,6 +406,20 @@ def enforce_symbol_access(
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+# Macro status route
+@app.get("/macro/status")
+def macro_status() -> dict[str, Any]:
+    statuses = get_macro_statuses_from_supabase()
+    return {
+        "data": statuses,
+        "regions": {
+            str(item.get("region", "")): item
+            for item in statuses
+            if item.get("region")
+        },
+    }
 
 
 # Route to get subscription by email

@@ -378,7 +378,7 @@ export function Home() {
     <PageTransition>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <motion.h1
-          className="text-[28px] font-semibold mb-6 tracking-tight"
+          className="text-[28px] font-semibold tracking-tight"
           style={{
             fontFamily:
               '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif',
@@ -390,7 +390,7 @@ export function Home() {
           Mes actifs suivis
         </motion.h1>
 
-        <div className="flex items-center justify-between text-xs text-gray-400 mb-4 tracking-wide">
+        <div className="flex items-center justify-between text-xs text-gray-400 mb-6 tracking-wide">
           <span>Analyse temps réel 4H</span>
         </div>
 
