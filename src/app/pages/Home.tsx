@@ -22,20 +22,6 @@ type HomeAsset = {
   status: AssetStatus;
 };
 
-type MacroRegionStatus = "favorable" | "neutral" | "risk";
-
-type MacroRegion = {
-  region: string;
-  label: string;
-  status: MacroRegionStatus;
-  regime?: string;
-  source?: string;
-  value?: {
-    vix?: number;
-    symbol?: string;
-    percent_change?: number;
-  } | null;
-};
 
 const LIBRARY_CACHE_KEY = "cbpr_library_cache_v1";
 
@@ -43,32 +29,6 @@ const HOME_ASSET_CACHE_PREFIX = "cbpr_home_asset_";
 const HOME_CACHE_DURATION = 1000 * 60 * 60 * 4; // 4h
 const HOME_REFRESH_LIMIT = 7;
 
-const DEFAULT_MACRO_REGIONS: MacroRegion[] = [
-  {
-    region: "us",
-    label: "US",
-    status: "neutral",
-    regime: "vix_level",
-    source: "VIX",
-    value: null,
-  },
-  {
-    region: "europe",
-    label: "Europe",
-    status: "neutral",
-    regime: "index_proxy",
-    source: "VSTOXX",
-    value: null,
-  },
-  {
-    region: "asia",
-    label: "Asie",
-    status: "neutral",
-    regime: "index_proxy",
-    source: "Nikkei",
-    value: null,
-  },
-];
 
 function getHomeAssetCacheKey(symbol: string) {
   return `${HOME_ASSET_CACHE_PREFIX}${encodeURIComponent(symbol)}`;
@@ -103,52 +63,6 @@ function setCachedHomeAsset(symbol: string, data: HomeAsset) {
   } catch { }
 }
 
-function getMacroIndicatorLabel(region: MacroRegion) {
-  if (region.region === "us") return "VIX";
-  if (region.region === "europe") return "VSTOXX";
-  if (region.region === "asia") return "Nikkei";
-  return region.source || "Macro";
-}
-
-function getMacroStatusColor(status: MacroRegionStatus) {
-  switch (status) {
-    case "favorable":
-      return "text-green-500";
-    case "neutral":
-      return "text-yellow-500";
-    case "risk":
-      return "text-red-500";
-  }
-}
-
-function normalizeMacroRegions(payload: any): MacroRegion[] {
-  const regions = payload?.regions || {};
-
-  const byRegion = new Map<string, MacroRegion>();
-
-  DEFAULT_MACRO_REGIONS.forEach((region) => {
-    byRegion.set(region.region, region);
-  });
-
-  Object.values(regions).forEach((item: any) => {
-    if (!item?.region) return;
-
-    byRegion.set(String(item.region), {
-      region: String(item.region),
-      label: String(item.label || item.region),
-      status: ["favorable", "neutral", "risk"].includes(String(item.status))
-        ? (String(item.status) as MacroRegionStatus)
-        : "neutral",
-      regime: item.regime ? String(item.regime) : undefined,
-      source: item.source ? String(item.source) : undefined,
-      value: item.value || null,
-    });
-  });
-
-  return ["us", "europe", "asia"]
-    .map((region) => byRegion.get(region))
-    .filter(Boolean) as MacroRegion[];
-}
 
 function inferAssetType(
   symbol: string,
@@ -220,7 +134,6 @@ export function Home() {
   const [openCbprMethod, setOpenCbprMethod] = useState(false);
   const [watchedAssets, setWatchedAssets] = useState<HomeAsset[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [macroRegions, setMacroRegions] = useState<MacroRegion[]>(DEFAULT_MACRO_REGIONS);
 
   useEffect(() => {
     window.scrollTo({
@@ -240,30 +153,6 @@ export function Home() {
     } catch { }
   }, []);
 
-  useEffect(() => {
-    let isCancelled = false;
-
-    const run = async () => {
-      try {
-        const payload = await apiService.getMacroStatus();
-
-        if (!isCancelled) {
-          setMacroRegions(normalizeMacroRegions(payload));
-        }
-      } catch (error) {
-        console.error("Error loading macro status:", error);
-        if (!isCancelled) {
-          setMacroRegions(DEFAULT_MACRO_REGIONS);
-        }
-      }
-    };
-
-    run();
-
-    return () => {
-      isCancelled = true;
-    };
-  }, []);
 
   useEffect(() => {
     let isCancelled = false;
@@ -419,29 +308,11 @@ export function Home() {
     }
   };
 
+
   if (!isRefreshing && favorites.length === 0) {
     return (
       <PageTransition>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <motion.div
-            className="grid grid-cols-3 gap-2 mb-6"
-            initial={{ opacity: 0, y: -8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.12, duration: 0.35 }}
-          >
-            {macroRegions.map((region) => (
-              <div key={region.region} className="text-center">
-                <div className="flex items-center justify-center gap-2 text-sm font-medium text-gray-700">
-                  <Circle className={`w-3 h-3 fill-current ${getMacroStatusColor(region.status)}`} />
-                  <span>{region.label}</span>
-                </div>
-                <div className="mt-1 text-xs text-gray-400 tracking-wide">
-                  {getMacroIndicatorLabel(region)}
-                </div>
-              </div>
-            ))}
-          </motion.div>
-
           <motion.h1
             className="text-[28px] font-semibold mb-6 tracking-tight"
             style={{
@@ -455,54 +326,29 @@ export function Home() {
             Mes actifs suivis
           </motion.h1>
 
-          <motion.div
-            className="max-w-md mx-auto text-center space-y-8 py-16"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2, duration: 0.6 }}
-          >
-            <motion.div
-              className="flex justify-center mt-5"
-              initial={{ scale: 0.8, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              transition={{ delay: 0.3, duration: 0.5 }}
-            >
-              <div className="w-24 h-24 bg-gray-100 rounded-3xl flex items-center justify-center">
-                <span className="text-5xl font-semibold text-gray-400">
-                  $
-                </span>
-              </div>
-            </motion.div>
-
+          <motion.div className="max-w-md mx-auto text-center space-y-8 py-16">
             <div className="space-y-3">
               <h2 className="text-xl font-semibold text-gray-900 tracking-tight">
                 Aucun actif suivi
               </h2>
-              <p className="text-gray-600 leading-relaxed px-4 mb-2">
-                Commencez par ajouter des actifs à votre liste
-                de suivi depuis la bibliothèque
-              </p>
               <p className="text-gray-600 leading-relaxed px-4">
-                15 actifs maximum
+                Commencez par ajouter des actifs à votre liste depuis la bibliothèque.
               </p>
             </div>
 
             <Link to="/library">
-              <motion.button
-                className="inline-flex items-center gap-2 bg-blue-500 text-white py-3.5 px-6 rounded-2xl shadow-lg shadow-blue-500/25 font-medium"
-                transition={{
-                  type: "spring",
-                  stiffness: 400,
-                  damping: 17,
-                }}
-              >
+              <motion.button className="inline-flex items-center gap-2 bg-blue-500 text-white py-3.5 px-6 rounded-2xl font-medium">
                 Parcourir la bibliothèque
                 <ArrowRight className="w-4 h-4" />
               </motion.button>
             </Link>
           </motion.div>
         </div>
-        <CbprMethode isOpen={openCbprMethod} onClose={() => setOpenCbprMethod(false)} />
+
+        <CbprMethode
+          isOpen={openCbprMethod}
+          onClose={() => setOpenCbprMethod(false)}
+        />
       </PageTransition>
     );
   }
@@ -510,45 +356,24 @@ export function Home() {
   return (
     <PageTransition>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <motion.div
-          className="grid grid-cols-3 gap-2 mb-6"
-          initial={{ opacity: 0, y: -8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.12, duration: 0.35 }}
-        >
-          {macroRegions.map((region) => (
-            <div key={region.region} className="text-center">
-              <div className="flex items-center justify-center gap-2 text-sm font-medium text-gray-700">
-                <Circle className={`w-3 h-3 fill-current ${getMacroStatusColor(region.status)}`} />
-                <span>{region.label}</span>
-              </div>
-              <div className="mt-1 text-xs text-gray-400 tracking-wide">
-                {getMacroIndicatorLabel(region)}
-              </div>
-            </div>
-          ))}
-        </motion.div>
-
         <motion.h1
           className="text-[28px] font-semibold tracking-tight"
           style={{
             fontFamily:
               '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif',
           }}
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
         >
           Mes actifs suivis
         </motion.h1>
 
-        <motion.div className="text-sm text-gray-500 mb-6 ">
+        <motion.div className="text-sm text-gray-500 mb-6">
           <span>Analyse en temps réel 4H</span>
         </motion.div>
 
         <div className="space-y-3">
           {displayedAssets.map((asset, index) => {
             const isPending = asset.currentPrice <= 0;
+
             return (
               <motion.div
                 key={asset.id}
@@ -572,24 +397,22 @@ export function Home() {
                             <span className="font-semibold text-gray-900 tracking-tight">
                               {asset.symbol}
                             </span>
-                            <motion.div
-                              animate={{ scale: [1, 1.12, 1] }}
-                              transition={{ duration: 2, repeat: Infinity }}
-                            >
-                              <Circle
-                                className={`w-2 h-2 fill-current ${getStatusColor(asset.status)}`}
-                              />
-                            </motion.div>
+                            <Circle
+                              className={`w-2 h-2 fill-current ${getStatusColor(asset.status)}`}
+                            />
                           </div>
+
                           <div className="text-sm text-gray-500 mt-0.5">
-                            {isPending ? "Signal en cours..." : getStatusLabel(asset.status)}
+                            {isPending
+                              ? "Signal en cours..."
+                              : getStatusLabel(asset.status)}
                           </div>
                         </div>
 
-                        <div className="text-right">
-                          <div className="font-semibold text-gray-900 tracking-tight">
-                            {isPending ? "--" : `${asset.currentPrice.toFixed(2)}€`}
-                          </div>
+                        <div className="text-right font-semibold text-gray-900 tracking-tight">
+                          {isPending
+                            ? "--"
+                            : `${asset.currentPrice.toFixed(2)}€`}
                         </div>
                       </div>
 
@@ -602,6 +425,11 @@ export function Home() {
           })}
         </div>
       </div>
+
+      <CbprMethode
+        isOpen={openCbprMethod}
+        onClose={() => setOpenCbprMethod(false)}
+      />
     </PageTransition>
   );
 }
