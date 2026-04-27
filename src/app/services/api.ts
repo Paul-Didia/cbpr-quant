@@ -152,6 +152,11 @@ export class ApiService {
     return this.requestPython(`/asset/${encodeURIComponent(symbol)}`);
   }
 
+  // ===== MACRO STATUS (PYTHON) =====
+  async getMacroStatus() {
+    return this.requestPython('/macro/status');
+  }
+
   // ===== CBPR ANALYSIS (PYTHON) =====
   async getAnalysis(symbol: string, interval: string = '4h', outputsize: number = 300) {
     return this.requestPython(

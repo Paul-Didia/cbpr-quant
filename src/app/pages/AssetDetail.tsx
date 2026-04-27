@@ -79,7 +79,51 @@ type AssetDetailData = {
   };
 };
 
+
 type UserPlan = "free" | "pro" | "quant";
+
+type MacroRegionStatus = "favorable" | "neutral" | "risk";
+
+type MacroRegion = {
+  region: string;
+  label: string;
+  status: MacroRegionStatus;
+  regime?: string;
+  source?: string;
+  value?: {
+    vix?: number;
+    symbol?: string;
+    percent_change?: number;
+  } | null;
+};
+
+
+const DEFAULT_MACRO_REGIONS: MacroRegion[] = [
+  {
+    region: "us",
+    label: "US",
+    status: "neutral",
+    regime: "vix_level",
+    source: "VIX",
+    value: null,
+  },
+  {
+    region: "europe",
+    label: "Europe",
+    status: "neutral",
+    regime: "index_proxy",
+    source: "VSTOXX",
+    value: null,
+  },
+  {
+    region: "asia",
+    label: "Asie",
+    status: "neutral",
+    regime: "index_proxy",
+    source: "Nikkei",
+    value: null,
+  },
+];
 
 const HOME_ASSET_CACHE_PREFIX = "cbpr_home_asset_";
 
@@ -237,6 +281,115 @@ function getStatusLabel(status: AssetDetailData["status"]) {
     default:
       return "Statut inconnu";
   }
+}
+
+function normalizeMacroRegions(payload: any): MacroRegion[] {
+  const regions = payload?.regions || {};
+  const byRegion = new Map<string, MacroRegion>();
+
+  DEFAULT_MACRO_REGIONS.forEach((region) => {
+    byRegion.set(region.region, region);
+  });
+
+  Object.values(regions).forEach((item: any) => {
+    if (!item?.region) return;
+
+    byRegion.set(String(item.region), {
+      region: String(item.region),
+      label: String(item.label || item.region),
+      status: ["favorable", "neutral", "risk"].includes(String(item.status))
+        ? (String(item.status) as MacroRegionStatus)
+        : "neutral",
+      regime: item.regime ? String(item.regime) : undefined,
+      source: item.source ? String(item.source) : undefined,
+      value: item.value || null,
+    });
+  });
+
+  return ["us", "europe", "asia"]
+    .map((region) => byRegion.get(region))
+    .filter(Boolean) as MacroRegion[];
+}
+
+function getMacroStatusColor(status: MacroRegionStatus) {
+  switch (status) {
+    case "favorable":
+      return "bg-green-500";
+    case "neutral":
+      return "bg-yellow-400";
+    case "risk":
+      return "bg-red-500";
+  }
+}
+
+function getMacroStatusLabel(status: MacroRegionStatus) {
+  switch (status) {
+    case "favorable":
+      return "Favorable";
+    case "neutral":
+      return "Neutre";
+    case "risk":
+      return "Sous stress";
+  }
+}
+
+function getMacroIndicatorLabel(region?: MacroRegion | null) {
+  if (!region) return "Macro";
+  if (region.region === "us") return "VIX";
+  if (region.region === "europe") return "VSTOXX";
+  if (region.region === "asia") return "Nikkei";
+  return region.source || "Macro";
+}
+
+function inferMacroRegionFromAsset(asset: AssetDetailData): string | null {
+  const exchange = String(asset.exchange || "").toLowerCase();
+  const currency = String(asset.currency || "").toUpperCase();
+  const symbol = String(asset.symbol || "").toUpperCase();
+
+  if (asset.assetType === "crypto") return null;
+
+  if (
+    exchange.includes("nasdaq") ||
+    exchange.includes("nyse") ||
+    exchange.includes("amex") ||
+    exchange.includes("usa") ||
+    currency === "USD"
+  ) {
+    return "us";
+  }
+
+  if (
+    exchange.includes("euronext") ||
+    exchange.includes("paris") ||
+    exchange.includes("xetra") ||
+    exchange.includes("deutsche") ||
+    exchange.includes("london") ||
+    exchange.includes("milan") ||
+    currency === "EUR" ||
+    currency === "GBP" ||
+    symbol.endsWith(".PA") ||
+    symbol.endsWith(".DE") ||
+    symbol.endsWith(".MI") ||
+    symbol.endsWith(".AS")
+  ) {
+    return "europe";
+  }
+
+  if (
+    exchange.includes("tokyo") ||
+    exchange.includes("japan") ||
+    exchange.includes("hong kong") ||
+    exchange.includes("shanghai") ||
+    exchange.includes("singapore") ||
+    currency === "JPY" ||
+    currency === "HKD" ||
+    symbol.endsWith(".T") ||
+    symbol.endsWith(".HK")
+  ) {
+    return "asia";
+  }
+
+  return "us";
 }
 
 
@@ -668,6 +821,7 @@ export function AssetDetail() {
   const [errorMessage, setErrorMessage] = useState("");
   const [openIndicatorHelp, setOpenIndicatorHelp] = useState<string | null>(null);
   const [openCbprMethod, setOpenCbprMethod] = useState(false);
+  const [macroRegions, setMacroRegions] = useState<MacroRegion[]>(DEFAULT_MACRO_REGIONS);
   const currentPlan: UserPlan = user?.subscription || "free";
 
   useEffect(() => {
@@ -676,6 +830,31 @@ export function AssetDetail() {
       behavior: "auto",
     });
   }, [symbol]);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    const run = async () => {
+      try {
+        const payload = await apiService.getMacroStatus();
+
+        if (!isCancelled) {
+          setMacroRegions(normalizeMacroRegions(payload));
+        }
+      } catch (error) {
+        console.error("Error loading macro status on asset detail:", error);
+        if (!isCancelled) {
+          setMacroRegions(DEFAULT_MACRO_REGIONS);
+        }
+      }
+    };
+
+    run();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, []);
 
 
   useEffect(() => {
@@ -880,6 +1059,11 @@ export function AssetDetail() {
       asset?.status || "neutral",
     ),
   };
+  const assetMacroRegionKey = asset ? inferMacroRegionFromAsset(asset) : null;
+  const assetMacroRegion = assetMacroRegionKey
+    ? macroRegions.find((region) => region.region === assetMacroRegionKey) || null
+    : null;
+
   const technicalIndicators = [
     {
       label: "Tendance",
@@ -1342,6 +1526,39 @@ export function AssetDetail() {
             </motion.div>
           )}
         </motion.div>
+
+        {assetMacroRegion && (
+          <motion.div
+            className="bg-white rounded-3xl px-5 py-4 mb-6 shadow-sm border border-gray-100"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.34, duration: 0.5 }}
+          >
+            <div className="text-xs text-gray-400 mb-3 tracking-wide uppercase">
+              Marché régional
+            </div>
+
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              <div>
+                <div className="text-lg font-semibold text-gray-900 tracking-tight">
+                  {assetMacroRegion.label}
+                </div>
+                <div className="text-xs text-gray-400 mt-1 tracking-wide">
+                  {getMacroIndicatorLabel(assetMacroRegion)}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <div
+                  className={`w-2.5 h-2.5 rounded-full ${getMacroStatusColor(assetMacroRegion.status)}`}
+                />
+                <div className="text-sm text-gray-500">
+                  {getMacroStatusLabel(assetMacroRegion.status)}
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
 
         {/* Méthode cbpr */}
         <motion.div

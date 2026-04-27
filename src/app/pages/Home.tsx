@@ -22,11 +22,53 @@ type HomeAsset = {
   status: AssetStatus;
 };
 
+type MacroRegionStatus = "favorable" | "neutral" | "risk";
+
+type MacroRegion = {
+  region: string;
+  label: string;
+  status: MacroRegionStatus;
+  regime?: string;
+  source?: string;
+  value?: {
+    vix?: number;
+    symbol?: string;
+    percent_change?: number;
+  } | null;
+};
+
 const LIBRARY_CACHE_KEY = "cbpr_library_cache_v1";
 
 const HOME_ASSET_CACHE_PREFIX = "cbpr_home_asset_";
 const HOME_CACHE_DURATION = 1000 * 60 * 60 * 4; // 4h
 const HOME_REFRESH_LIMIT = 7;
+
+const DEFAULT_MACRO_REGIONS: MacroRegion[] = [
+  {
+    region: "us",
+    label: "US",
+    status: "neutral",
+    regime: "vix_level",
+    source: "VIX",
+    value: null,
+  },
+  {
+    region: "europe",
+    label: "Europe",
+    status: "neutral",
+    regime: "index_proxy",
+    source: "VSTOXX",
+    value: null,
+  },
+  {
+    region: "asia",
+    label: "Asie",
+    status: "neutral",
+    regime: "index_proxy",
+    source: "Nikkei",
+    value: null,
+  },
+];
 
 function getHomeAssetCacheKey(symbol: string) {
   return `${HOME_ASSET_CACHE_PREFIX}${encodeURIComponent(symbol)}`;
@@ -61,6 +103,52 @@ function setCachedHomeAsset(symbol: string, data: HomeAsset) {
   } catch { }
 }
 
+function getMacroIndicatorLabel(region: MacroRegion) {
+  if (region.region === "us") return "VIX";
+  if (region.region === "europe") return "VSTOXX";
+  if (region.region === "asia") return "Nikkei";
+  return region.source || "Macro";
+}
+
+function getMacroStatusColor(status: MacroRegionStatus) {
+  switch (status) {
+    case "favorable":
+      return "text-green-500";
+    case "neutral":
+      return "text-yellow-500";
+    case "risk":
+      return "text-red-500";
+  }
+}
+
+function normalizeMacroRegions(payload: any): MacroRegion[] {
+  const regions = payload?.regions || {};
+
+  const byRegion = new Map<string, MacroRegion>();
+
+  DEFAULT_MACRO_REGIONS.forEach((region) => {
+    byRegion.set(region.region, region);
+  });
+
+  Object.values(regions).forEach((item: any) => {
+    if (!item?.region) return;
+
+    byRegion.set(String(item.region), {
+      region: String(item.region),
+      label: String(item.label || item.region),
+      status: ["favorable", "neutral", "risk"].includes(String(item.status))
+        ? (String(item.status) as MacroRegionStatus)
+        : "neutral",
+      regime: item.regime ? String(item.regime) : undefined,
+      source: item.source ? String(item.source) : undefined,
+      value: item.value || null,
+    });
+  });
+
+  return ["us", "europe", "asia"]
+    .map((region) => byRegion.get(region))
+    .filter(Boolean) as MacroRegion[];
+}
 
 function inferAssetType(
   symbol: string,
@@ -132,6 +220,7 @@ export function Home() {
   const [openCbprMethod, setOpenCbprMethod] = useState(false);
   const [watchedAssets, setWatchedAssets] = useState<HomeAsset[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [macroRegions, setMacroRegions] = useState<MacroRegion[]>(DEFAULT_MACRO_REGIONS);
 
   useEffect(() => {
     window.scrollTo({
@@ -149,6 +238,31 @@ export function Home() {
         sessionStorage.removeItem("cbpr_show_method_on_home");
       }
     } catch { }
+  }, []);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    const run = async () => {
+      try {
+        const payload = await apiService.getMacroStatus();
+
+        if (!isCancelled) {
+          setMacroRegions(normalizeMacroRegions(payload));
+        }
+      } catch (error) {
+        console.error("Error loading macro status:", error);
+        if (!isCancelled) {
+          setMacroRegions(DEFAULT_MACRO_REGIONS);
+        }
+      }
+    };
+
+    run();
+
+    return () => {
+      isCancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -309,6 +423,25 @@ export function Home() {
     return (
       <PageTransition>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <motion.div
+            className="grid grid-cols-3 gap-2 mb-6"
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.12, duration: 0.35 }}
+          >
+            {macroRegions.map((region) => (
+              <div key={region.region} className="text-center">
+                <div className="flex items-center justify-center gap-2 text-sm font-medium text-gray-700">
+                  <Circle className={`w-3 h-3 fill-current ${getMacroStatusColor(region.status)}`} />
+                  <span>{region.label}</span>
+                </div>
+                <div className="mt-1 text-xs text-gray-400 tracking-wide">
+                  {getMacroIndicatorLabel(region)}
+                </div>
+              </div>
+            ))}
+          </motion.div>
+
           <motion.h1
             className="text-[28px] font-semibold mb-6 tracking-tight"
             style={{
@@ -377,6 +510,25 @@ export function Home() {
   return (
     <PageTransition>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <motion.div
+          className="grid grid-cols-3 gap-2 mb-6"
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.12, duration: 0.35 }}
+        >
+          {macroRegions.map((region) => (
+            <div key={region.region} className="text-center">
+              <div className="flex items-center justify-center gap-2 text-sm font-medium text-gray-700">
+                <Circle className={`w-3 h-3 fill-current ${getMacroStatusColor(region.status)}`} />
+                <span>{region.label}</span>
+              </div>
+              <div className="mt-1 text-xs text-gray-400 tracking-wide">
+                {getMacroIndicatorLabel(region)}
+              </div>
+            </div>
+          ))}
+        </motion.div>
+
         <motion.h1
           className="text-[28px] font-semibold tracking-tight"
           style={{
@@ -390,9 +542,9 @@ export function Home() {
           Mes actifs suivis
         </motion.h1>
 
-        <div className="flex items-center justify-between text-xs text-gray-400 mb-6 tracking-wide">
-          <span>Analyse temps réel 4H</span>
-        </div>
+        <motion.div className="text-sm text-gray-500 mb-6 ">
+          <span>Analyse en temps réel 4H</span>
+        </motion.div>
 
         <div className="space-y-3">
           {displayedAssets.map((asset, index) => {
