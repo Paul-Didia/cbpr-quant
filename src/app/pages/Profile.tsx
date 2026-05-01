@@ -5,6 +5,8 @@ import { PageTransition } from '../components/PageTransition';
 import { CbprMethode } from '../components/CbprMethode';
 import { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import mascotLight from '../assets/mascotte_light.svg';
+import mascotProfile from '../assets/mascotte_profile.svg';
 
 export function Profile() {
   const navigate = useNavigate();
@@ -77,7 +79,7 @@ export function Profile() {
   
   return (
     <PageTransition>
-      <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative">
         <motion.div 
           className="mb-6"
           initial={{ opacity: 0, y: -20 }}
@@ -105,10 +107,24 @@ export function Profile() {
         >
           Mon profil
         </motion.h1>
+
+        <motion.div
+          className="relative h-28 sm:h-32 mb-[-28px] pointer-events-none z-20"
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.16, duration: 0.5 }}
+        >
+          <img
+            src={mascotProfile}
+            alt="CBPR Mascotte Profil"
+            className="absolute right-2 sm:right-8 bottom-0 h-36 sm:h-44 w-auto object-contain"
+            loading="eager"
+          />
+        </motion.div>
         
         {/* Profile Info */}
         <motion.div 
-          className="bg-white rounded-3xl p-6 mb-6 shadow-sm border border-gray-100"
+          className="relative z-10 bg-white rounded-3xl p-6 mb-6 shadow-sm border border-gray-100"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2, duration: 0.5 }}
@@ -116,11 +132,15 @@ export function Profile() {
         >
           <div className="flex items-center gap-4 mb-6">
             <motion.div 
-              className="w-20 h-20 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center shadow-md"
+              className="w-20 h-20 bg-gradient-to-br from-blue-500 to-blue-600 rounded-3xl flex items-center justify-center shadow-md overflow-hidden"
               whileHover={{ scale: 1.05, rotate: 5 }}
               transition={{ type: "spring", stiffness: 400, damping: 17 }}
             >
-              <User className="w-10 h-10 text-white" />
+              <img
+                src={mascotLight}
+                alt="CBPR Mascot"
+                className="w-17 h-17 object-contain"
+              />
             </motion.div>
             <div>
               <div className="mb-2">

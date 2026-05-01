@@ -9,8 +9,26 @@ export function Landing() {
   const triggerTap = () => trigger("success");
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-blue-50 via-white to-gray-50 flex items-center justify-center px-4 overflow-hidden">
-      <div className="max-w-md w-full text-center space-y-10">
+    <div className="relative min-h-screen bg-[#061a3a] flex items-center justify-center px-4 overflow-hidden">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_38%,rgba(59,130,246,0.35)_0%,rgba(15,60,130,0.22)_24%,rgba(6,26,58,0)_58%)] pointer-events-none" />
+      <div className="absolute inset-0 bg-[linear-gradient(180deg,#071b3c_0%,#06152f_52%,#030b1b_100%)] pointer-events-none" />
+      <div className="absolute left-1/2 top-[38%] h-[980px] w-[1600px] -translate-x-1/2 rounded-[50%] bg-[#061225] border-t border-blue-300/50 shadow-[0_-18px_45px_rgba(59,130,246,0.65)] pointer-events-none" />
+      <div className="absolute left-[18%] top-[14%] h-1.5 w-1.5 rounded-full bg-white/80 shadow-[0_0_12px_rgba(255,255,255,0.9)] pointer-events-none" />
+      <div className="absolute right-[18%] top-[11%] h-1.5 w-1.5 rounded-full bg-white/80 shadow-[0_0_12px_rgba(255,255,255,0.9)] pointer-events-none" />
+      <div className="absolute right-[30%] top-[23%] h-2 w-2 rounded-full bg-white/90 shadow-[0_0_16px_rgba(255,255,255,0.95)] pointer-events-none" />
+      <div className="absolute left-[10%] top-[32%] h-2 w-2 rotate-45 bg-white/80 shadow-[0_0_18px_rgba(255,255,255,0.95)] pointer-events-none" />
+      <div className="absolute left-[22%] top-[30%] h-1 w-1 rotate-45 bg-white/80 shadow-[0_0_18px_rgba(255,255,255,0.95)] pointer-events-none" />
+      <div className="absolute right-[13%] top-[30%] h-0.5 w-0.5 rounded-full bg-white/80 shadow-[0_0_10px_rgba(255,255,255,0.9)] pointer-events-none" />
+      <div className="absolute right-[30%] top-[10%] h-0.5 w-0.5 rounded-full bg-white/80 shadow-[0_0_10px_rgba(255,255,255,0.9)] pointer-events-none" />
+      <div className="absolute right-[70%] top-[12%] h-0.5 w-0.5 rounded-full bg-white/80 shadow-[0_0_10px_rgba(255,255,255,0.9)] pointer-events-none" />
+      <div className="absolute right-[62%] top-[10%] h-0.5 w-0.5 rounded-full bg-white/80 shadow-[0_0_10px_rgba(255,255,255,0.9)] pointer-events-none" />
+      <div className="absolute left-[35%] top-[8%] h-0.5 w-0.5 rounded-full bg-white/80 shadow-[0_0_10px_rgba(255,255,255,0.9)] pointer-events-none" />
+      <div className="absolute left-[50%] top-[18%] h-0.5 w-0.5 rounded-full bg-white/80 shadow-[0_0_10px_rgba(255,255,255,0.9)] pointer-events-none" />
+      <div className="absolute right-[40%] top-[26%] h-0.5 w-0.5 rounded-full bg-white/80 shadow-[0_0_10px_rgba(255,255,255,0.9)] pointer-events-none" />
+      <div className="absolute left-[15%] top-[40%] h-0.5 w-0.5 rounded-full bg-white/80 shadow-[0_0_10px_rgba(255,255,255,0.9)] pointer-events-none" />
+
+      
+      <div className="relative z-10 max-w-md w-full text-center space-y-10">
         {/* Animated Logo */}
         <motion.div
           className="flex justify-center"
@@ -28,12 +46,12 @@ export function Landing() {
           animate={{ y: 0, opacity: 1 }}
           transition={{ delay: 0.3, duration: 0.8 }}
         >
-          <h1 className="text-4xl font-semibold text-gray-900 tracking-tight" style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif' }}>
+          <h1 className="text-4xl font-semibold text-white tracking-tight" style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif' }}>
             CBPR Quant
           </h1>
-          <p className="text-gray-600 text-lg leading-relaxed">
+          <p className="text-white/80 text-lg leading-relaxed">
             Répondez à la question essentielle :<br />
-            <span className="font-semibold text-gray-900">Quand acheter ?</span>
+            <span className="font-semibold text-white">Quand acheter ?</span>
           </p>
         </motion.div>
 
@@ -64,7 +82,7 @@ export function Landing() {
 
         {/* Disclaimer */}
         <motion.p
-          className="text-xs text-gray-500 px-8 leading-relaxed"
+          className="text-xs text-white/60 px-8 leading-relaxed"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.8, duration: 0.8 }}
@@ -72,45 +90,6 @@ export function Landing() {
           Cette application ne fournit pas de conseils d'investissement.
           Elle vous aide à identifier les opportunités d'achat potentielles.
         </motion.p>
-
-        {/* Floating brand elements */}
-        <motion.div
-          className="absolute top-20 left-10 opacity-5 pointer-events-none"
-          animate={{
-            y: [0, -20, 0],
-            rotate: [0, 5, 0],
-          }}
-          transition={{
-            duration: 6,
-            repeat: Infinity,
-            ease: "easeInOut"
-          }}
-        >
-          <AppLogo
-            size={96}
-            rounded="rounded-[28px]"
-            shadow={false}
-          />
-        </motion.div>
-
-        <motion.div
-          className="absolute bottom-20 right-10 opacity-5 pointer-events-none"
-          animate={{
-            y: [0, 20, 0],
-            rotate: [0, -5, 0],
-          }}
-          transition={{
-            duration: 7,
-            repeat: Infinity,
-            ease: "easeInOut"
-          }}
-        >
-          <AppLogo
-            size={72}
-            rounded="rounded-[24px]"
-            shadow={false}
-          />
-        </motion.div>
       </div>
     </div>
   );

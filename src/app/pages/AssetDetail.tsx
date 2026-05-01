@@ -13,6 +13,12 @@ import { useWebHaptics } from "web-haptics/react";
 import logoEtoro from "../assets/logo_etoro.png";
 import logoTradeRepublic from "../assets/logo_trade_rep.png";
 import logoXInvest from "../assets/logo_x_invest.png";
+import mascotteIcon from "../assets/mascotte.svg";
+import mascotteOpportunity from "../assets/mascotte_opportunity.svg";
+import mascotteRisque from "../assets/mascotte_risque.svg";
+import mascotteNeutre from "../assets/mascotte_neutre.svg";
+import mascotte404 from "../assets/mascotte_404.svg";
+import assetDetailHero from "../assets/AssetDetail_hero.svg";
 import {
   ComposedChart,
   Area,
@@ -151,7 +157,7 @@ function setCachedHomeAsset(
         timestamp: Date.now(),
       }),
     );
-  } catch {}
+  } catch { }
 }
 
 const FREE_STOCK_SYMBOLS = new Set([
@@ -280,6 +286,31 @@ function getStatusLabel(status: AssetDetailData["status"]) {
       return "Zone neutre";
     default:
       return "Statut inconnu";
+  }
+}
+
+
+function getStatusMascotte(status: AssetDetailData["status"]) {
+  switch (status) {
+    case "opportunity":
+      return mascotteOpportunity;
+    case "risk":
+      return mascotteRisque;
+    case "neutral":
+    default:
+      return mascotteNeutre;
+  }
+}
+
+function getMacroMascotte(status: MacroRegionStatus) {
+  switch (status) {
+    case "favorable":
+      return mascotteOpportunity;
+    case "risk":
+      return mascotteRisque;
+    case "neutral":
+    default:
+      return mascotteNeutre;
   }
 }
 
@@ -656,10 +687,10 @@ function mapToAssetDetail(analysisResponse: any, symbol: string): AssetDetailDat
   const assetType = backendAssetType
     ? normalizeAssetType(backendAssetType, quote?.name || symbol, quote?.exchange)
     : normalizeAssetType(
-        quote?.instrument_type,
-        quote?.name || symbol,
-        quote?.exchange,
-      );
+      quote?.instrument_type,
+      quote?.name || symbol,
+      quote?.exchange,
+    );
 
   const values = Array.isArray(analysisResponse?.values) ? analysisResponse.values : [];
 
@@ -788,7 +819,7 @@ function mapToAssetDetail(analysisResponse: any, symbol: string): AssetDetailDat
       title: String(explanationData?.title || "Analyse CBPR"),
       summary: String(
         explanationData?.summary ||
-          "Le contexte actuel reste équilibré et ne montre pas de déséquilibre technique suffisamment clair.",
+        "Le contexte actuel reste équilibré et ne montre pas de déséquilibre technique suffisamment clair.",
       ),
       reasons: Array.isArray(explanationData?.reasons)
         ? explanationData.reasons.map((item: unknown) => String(item))
@@ -904,13 +935,13 @@ export function AssetDetail() {
 
         const requiredPlan: UserPlan =
           backendRequiredPlan === "free" ||
-          backendRequiredPlan === "pro" ||
-          backendRequiredPlan === "quant"
+            backendRequiredPlan === "pro" ||
+            backendRequiredPlan === "quant"
             ? (backendRequiredPlan as UserPlan)
             : getRequiredPlanForAsset({
-                symbol: mapped.symbol,
-                assetType: mapped.assetType,
-              });
+              symbol: mapped.symbol,
+              assetType: mapped.assetType,
+            });
 
         const isAllowed =
           currentPlan === "quant"
@@ -1064,6 +1095,8 @@ export function AssetDetail() {
     ? macroRegions.find((region) => region.region === assetMacroRegionKey) || null
     : null;
 
+  const statusMascotte = asset ? getStatusMascotte(asset.status) : mascotteIcon;
+
   const technicalIndicators = [
     {
       label: "Tendance",
@@ -1144,6 +1177,14 @@ export function AssetDetail() {
             >
               Retour à la bibliothèque
             </Link>
+            <div className="mt-8 flex justify-center">
+              <img
+                src={mascotte404}
+                alt="CBPR Mascotte 404"
+                className="w-80 h-80 object-contain opacity-50"
+                loading="lazy"
+              />
+            </div>
           </div>
         </div>
       </PageTransition>
@@ -1217,7 +1258,7 @@ export function AssetDetail() {
         </motion.div>
 
         <motion.div
-          className="mb-8 flex items-start gap-4"
+          className="mb-6 flex items-start gap-4"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1, duration: 0.5 }}
@@ -1234,17 +1275,24 @@ export function AssetDetail() {
               size="lg"
             />
           </motion.div>
-          <div>
-            <div className="flex items-center justify-between w-full">
-              <h1
-                className="text-[32px] font-semibold text-gray-900 tracking-tight"
-                style={{
-                  fontFamily:
-                    '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif',
-                }}
-              >
-                {asset.symbol}
-              </h1>
+
+          <div className="min-w-0 flex-1 pt-1">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h1
+                  className="text-[32px] font-semibold text-gray-900 tracking-tight"
+                  style={{
+                    fontFamily:
+                      '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif',
+                  }}
+                >
+                  {asset.symbol}
+                </h1>
+                <p className="text-gray-600 truncate">{asset.name}</p>
+                <p className="text-sm text-gray-500 mt-1">
+                  {asset.exchange || "Marché non renseigné"}
+                </p>
+              </div>
 
               <button
                 onClick={() => {
@@ -1260,17 +1308,30 @@ export function AssetDetail() {
                     alert("Lien copié !");
                   }
                 }}
-                className="p-2 rounded-full hover:bg-gray-100 transition-all"
+                className="p-2 rounded-full hover:bg-gray-100 transition-all flex-shrink-0"
               >
                 <Share className="w-5 h-5 text-gray-400" />
               </button>
             </div>
-            <p className="text-gray-600">{asset.name}</p>
-            <p className="text-sm text-gray-500 mt-1">
-              {asset.exchange || "Marché non renseigné"}
-            </p>
+          </div>
+        </motion.div>
+
+        <motion.div
+          className="relative min-h-[210px] mb-3 overflow-hidden rounded-[32px] px-6"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.16, duration: 0.5 }}
+        >
+          <img
+            src={assetDetailHero}
+            alt="CBPR analyse"
+            className="absolute right-0 bottom-0 h-full pb-4 w-auto object-contain pointer-events-none"
+            loading="eager"
+          />
+
+          <div className="relative z-10 max-w-[52%] sm:max-w-[58%]">
             <motion.div
-              className="text-4xl font-semibold text-gray-900 mt-3 tracking-tight"
+              className="text-4xl font-semibold text-gray-900 tracking-tight"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 0.3, duration: 0.5 }}
@@ -1408,8 +1469,8 @@ export function AssetDetail() {
               />
             </ComposedChart>
           </ResponsiveContainer>
-
         </motion.div>
+
 
         {/* Signal */}
         <motion.div
@@ -1418,21 +1479,33 @@ export function AssetDetail() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.25, duration: 0.5 }}
         >
-          <div className="text-xs text-gray-400 mb-2 tracking-wide uppercase">
+          <div className="text-xs text-gray-400 tracking-wide uppercase">
             Statut de l'actif
           </div>
 
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <div className="flex items-center gap-2">
-              <div
-                className={`w-2.5 h-2.5 rounded-full ${asset.status === "opportunity"
-                  ? "bg-green-500"
+              <motion.span
+                className={`relative inline-flex h-2.5 w-2.5 ${asset.status === "opportunity"
+                  ? "text-green-500"
                   : asset.status === "risk"
-                    ? "bg-red-500"
-                    : "bg-yellow-400"
+                    ? "text-red-500"
+                    : "text-yellow-400"
                   }`}
-              />
+                aria-hidden="true"
+              >
+                <span className="absolute inline-flex h-full w-full rounded-full bg-current opacity-30 animate-ping" />
+                <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-current" />
+              </motion.span>
               <div className="text-sm text-gray-500">{getStatusLabel(asset.status)}</div>
+            </div>
+            <div className="flex items-center gap-2">
+              <img
+                src={statusMascotte}
+                alt="CBPR Mascotte"
+                className="w-20 h-20 object-contain opacity-100"
+                loading="lazy"
+              />
             </div>
           </div>
         </motion.div>
@@ -1534,7 +1607,7 @@ export function AssetDetail() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.34, duration: 0.5 }}
           >
-            <div className="text-xs text-gray-400 mb-3 tracking-wide uppercase">
+            <div className="text-xs text-gray-400 tracking-wide uppercase">
               Marché régional
             </div>
 
@@ -1543,18 +1616,32 @@ export function AssetDetail() {
                 <div className="text-lg font-semibold text-gray-900 tracking-tight">
                   {assetMacroRegion.label}
                 </div>
-                <div className="text-xs text-gray-400 mt-1 tracking-wide">
-                  {getMacroIndicatorLabel(assetMacroRegion)}
+                <div className="flex items-center gap-2 mt-1">
+                  <motion.span
+                    className={`relative inline-flex h-2.5 w-2.5 ${assetMacroRegion.status === "favorable"
+                        ? "text-green-500"
+                        : assetMacroRegion.status === "risk"
+                          ? "text-red-500"
+                          : "text-yellow-400"
+                      }`}
+                    aria-hidden="true"
+                  >
+                    <span className="absolute inline-flex h-full w-full rounded-full bg-current opacity-30 animate-ping" />
+                    <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-current" />
+                  </motion.span>
+                  <div className="text-xs text-gray-400 tracking-wide">
+                    {getMacroStatusLabel(assetMacroRegion.status)}
+                  </div>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
-                <div
-                  className={`w-2.5 h-2.5 rounded-full ${getMacroStatusColor(assetMacroRegion.status)}`}
+              <div className="flex items-center justify-center">
+                <img
+                  src={getMacroMascotte(assetMacroRegion.status)}
+                  alt="CBPR Mascotte Macro"
+                  className="w-20 h-20 object-contain opacity-100"
+                  loading="lazy"
                 />
-                <div className="text-sm text-gray-500">
-                  {getMacroStatusLabel(assetMacroRegion.status)}
-                </div>
               </div>
             </div>
           </motion.div>

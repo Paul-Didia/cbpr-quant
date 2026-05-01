@@ -1,5 +1,5 @@
 import { motion } from "motion/react";
-import { AssetIcon } from "./AssetIcon";
+import mascotAnalyse from "../assets/mascotte_analyse.svg";
 
 interface AssetLoadingTransitionProps {
   assetName: string;
@@ -109,12 +109,12 @@ export function AssetLoadingTransition({
               repeat: Infinity,
               ease: "easeInOut",
             }}
+            className="flex items-center justify-center"
           >
-            <AssetIcon
-              logo={assetLogo ?? ''}
-              name={assetName}
-              assetType={assetType}
-              size="xl"
+            <img
+              src={mascotAnalyse}
+              alt="CBPR Analyse Mascot"
+              className="w-40 h-40 object-contain opacity-80"
             />
           </motion.div>
         </motion.div>

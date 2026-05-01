@@ -11,6 +11,7 @@ import { CbprMethode } from "../components/CbprMethode";
 import { AssetIcon } from "../components/AssetIcon";
 import { useFavorites } from "../contexts/FavoritesContext";
 import { apiService } from "../services/api";
+import homeHero from "../assets/home_hero.svg";
 
 type HomeAsset = {
   id: string;
@@ -286,6 +287,36 @@ export function Home() {
     });
   }, [favorites, watchedAssets]);
 
+  const totalValue = useMemo(() => {
+    return displayedAssets.reduce((sum, asset) => {
+      if (!asset.currentPrice || asset.currentPrice <= 0) return sum;
+      return sum + asset.currentPrice;
+    }, 0);
+  }, [displayedAssets]);
+
+  const globalStatus = useMemo<AssetStatus>(() => {
+    const counts: Record<AssetStatus, number> = {
+      opportunity: 0,
+      neutral: 0,
+      risk: 0,
+    };
+
+    displayedAssets.forEach((asset) => {
+      if (!asset.currentPrice || asset.currentPrice <= 0) return;
+      counts[asset.status] += 1;
+    });
+
+    if (counts.opportunity > counts.neutral && counts.opportunity > counts.risk) {
+      return "opportunity";
+    }
+
+    if (counts.risk > counts.neutral && counts.risk > counts.opportunity) {
+      return "risk";
+    }
+
+    return "neutral";
+  }, [displayedAssets]);
+
   const getStatusColor = (status: AssetStatus) => {
     switch (status) {
       case "opportunity":
@@ -313,18 +344,24 @@ export function Home() {
     return (
       <PageTransition>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <motion.h1
-            className="text-[28px] font-semibold mb-6 tracking-tight"
-            style={{
-              fontFamily:
-                '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif',
-            }}
+
+          <motion.div
+            className="flex items-center gap-3 mb-6"
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
           >
-            Mes actifs suivis
-          </motion.h1>
+
+            <h1
+              className="text-[28px] font-semibold tracking-tight"
+              style={{
+                fontFamily:
+                  '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif',
+              }}
+            >
+              Mes actifs suivis
+            </h1>
+          </motion.div>
 
           <motion.div className="max-w-md mx-auto text-center space-y-8 py-16">
             <div className="space-y-3">
@@ -354,82 +391,133 @@ export function Home() {
   }
 
   return (
-    <PageTransition>
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <motion.h1
-          className="text-[28px] font-semibold tracking-tight"
-          style={{
-            fontFamily:
-              '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif',
-          }}
+    <div>
+      <div className="relative min-h-screen overflow-hidden bg-[#f9fafb] pb-24">
+
+        <section
+          className="fixed left-0 right-0 top-0 z-0 h-[360px] lg:h-[500px] overflow-hidden bg-[#061a3a] px-6 pt-16 sm:px-8 lg:px-12"
         >
-          Mes actifs suivis
-        </motion.h1>
+          <img
+            src={homeHero}
+            alt="CBPR Quant"
+            className="absolute inset-0 h-full lg:top-[-200px] lg:h-[700px] w-full object-cover"
+            loading="eager"
+          />
 
-        <motion.div className="text-sm text-gray-500 mb-6">
-          <span>Analyse en temps réel 4H</span>
-        </motion.div>
+          <div className="relative z-10 max-w-7xl mx-auto">
+            <h1
+              className="text-[28px] font-semibold tracking-tight text-white"
+              style={{
+                fontFamily:
+                  '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif',
+              }}
+            >
+              Mes actifs suivis
+            </h1>
 
-        <div className="space-y-3">
-          {displayedAssets.map((asset, index) => {
-            const isPending = asset.currentPrice <= 0;
+            <div className="mt-6">
+              <div className="text-sm text-white/80">Valeur théorique suivie</div>
 
-            return (
               <motion.div
-                key={asset.id}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: index * 0.08, duration: 0.35 }}
+                className="mt-1"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5 }}
               >
-                <Link to={`/asset/${encodeURIComponent(asset.id)}`}>
-                  <div className="block bg-white rounded-2xl p-4 border border-gray-100 active:bg-gray-50 transition-colors">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-4 flex-1">
-                        <AssetIcon
-                          logo={asset.logo}
-                          name={asset.name}
-                          assetType={asset.assetType}
-                          size="md"
-                        />
+                <div className="text-[42px] lg:text-[60px] leading-none tracking-tight text-white">
+                  {totalValue > 0 ? `${totalValue.toFixed(2)} €` : "--"}
+                </div>
 
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2">
-                            <span className="font-semibold text-gray-900 tracking-tight">
-                              {asset.symbol}
-                            </span>
-                            <Circle
-                              className={`w-2 h-2 fill-current ${getStatusColor(asset.status)}`}
-                            />
-                          </div>
-
-                          <div className="text-sm text-gray-500 mt-0.5">
-                            {isPending
-                              ? "Signal en cours..."
-                              : getStatusLabel(asset.status)}
-                          </div>
-                        </div>
-
-                        <div className="text-right font-semibold text-gray-900 tracking-tight">
-                          {isPending
-                            ? "--"
-                            : `${asset.currentPrice.toFixed(2)}€`}
-                        </div>
-                      </div>
-
-                      <ArrowRight className="w-5 h-5 text-gray-400 ml-4" />
-                    </div>
-                  </div>
-                </Link>
+                <div className="mt-3 flex items-center gap-2">
+                  <motion.span
+                    className={`relative inline-flex h-2.5 w-2.5 ${getStatusColor(globalStatus)}`}
+                    aria-hidden="true"
+                  >
+                    <span className="absolute inline-flex h-full w-full rounded-full bg-current opacity-30 animate-ping" />
+                    <Circle className="relative inline-flex h-2.5 w-2.5 fill-current" />
+                  </motion.span>
+                  <span className="text-base font-semibold text-white/90">
+                    {getStatusLabel(globalStatus)}
+                  </span>
+                </div>
               </motion.div>
-            );
-          })}
-        </div>
-      </div>
+            </div>
+          </div>
+        </section>
 
+        <PageTransition>
+          <div className="relative z-10 mt-[305px] rounded-t-[32px] bg-[#f9fafb] px-4 pb-6 pt-6 sm:px-6 lg:mt-[500px] lg:px-8">
+            <div className="mx-auto max-w-7xl">
+              <div className="mb-4 text-sm text-gray-500">
+                Analyse en temps réel 4H
+              </div>
+              <div className="space-y-3">
+                {displayedAssets.map((asset, index) => {
+                  const isPending = asset.currentPrice <= 0;
+
+                  return (
+                    <motion.div
+                      key={asset.id}
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: index * 0.08, duration: 0.35 }}
+                    >
+                      <Link to={`/asset/${encodeURIComponent(asset.id)}`}>
+                        <div className="block bg-white rounded-2xl p-4 border border-gray-100 active:bg-gray-50 transition-colors">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-4 flex-1">
+                              <AssetIcon
+                                logo={asset.logo}
+                                name={asset.name}
+                                assetType={asset.assetType}
+                                size="md"
+                              />
+
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-semibold text-gray-900 tracking-tight">
+                                    {asset.symbol}
+                                  </span>
+                                  <motion.span
+                                    className={`relative inline-flex h-2 w-2 ${getStatusColor(asset.status)}`}
+                                    aria-hidden="true"
+                                  >
+                                    <span className="absolute inline-flex h-full w-full rounded-full bg-current opacity-25 animate-ping" />
+                                    <Circle className="relative inline-flex h-2 w-2 fill-current" />
+                                  </motion.span>
+                                </div>
+
+                                <div className="text-sm text-gray-500 mt-0.5">
+                                  {isPending
+                                    ? "Signal en cours..."
+                                    : getStatusLabel(asset.status)}
+                                </div>
+                              </div>
+
+                              <div className="text-right font-semibold text-gray-900 tracking-tight">
+                                {isPending
+                                  ? "--"
+                                  : `${asset.currentPrice.toFixed(2)}€`}
+                              </div>
+                            </div>
+
+                            <ArrowRight className="w-5 h-5 text-gray-400 ml-4" />
+                          </div>
+                        </div>
+                      </Link>
+                    </motion.div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </PageTransition>
+
+      </div>
       <CbprMethode
         isOpen={openCbprMethod}
         onClose={() => setOpenCbprMethod(false)}
       />
-    </PageTransition>
+    </div>
   );
 }
