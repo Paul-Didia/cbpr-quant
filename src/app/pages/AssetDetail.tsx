@@ -1317,17 +1317,17 @@ export function AssetDetail() {
         </motion.div>
 
         <motion.div
-          className="relative min-h-[210px] mb-3 overflow-hidden rounded-[32px] px-6"
+          className="relative mb-3 overflow-hidden rounded-[32px] px-6"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.16, duration: 0.5 }}
         >
-          <img
+          {/* <img
             src={assetDetailHero}
             alt="CBPR analyse"
             className="absolute right-0 bottom-0 h-full pb-4 w-auto object-contain pointer-events-none"
             loading="eager"
-          />
+          /> */}
 
           <div className="relative z-10 max-w-[52%] sm:max-w-[58%]">
             <motion.div
