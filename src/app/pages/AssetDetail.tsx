@@ -1258,7 +1258,7 @@ export function AssetDetail() {
         </motion.div>
 
         <motion.div
-          className="mb-6 flex items-start gap-4"
+          className="mb-8 flex items-start gap-4"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1, duration: 0.5 }}
@@ -1275,24 +1275,17 @@ export function AssetDetail() {
               size="lg"
             />
           </motion.div>
-
-          <div className="min-w-0 flex-1 pt-1">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <h1
-                  className="text-[32px] font-semibold text-gray-900 tracking-tight"
-                  style={{
-                    fontFamily:
-                      '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif',
-                  }}
-                >
-                  {asset.symbol}
-                </h1>
-                <p className="text-gray-600 truncate">{asset.name}</p>
-                <p className="text-sm text-gray-500 mt-1">
-                  {asset.exchange || "Marché non renseigné"}
-                </p>
-              </div>
+          <div>
+            <div className="flex items-center justify-between w-full">
+              <h1
+                className="text-[32px] font-semibold text-gray-900 tracking-tight"
+                style={{
+                  fontFamily:
+                    '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif',
+                }}
+              >
+                {asset.symbol}
+              </h1>
 
               <button
                 onClick={() => {
@@ -1308,30 +1301,17 @@ export function AssetDetail() {
                     alert("Lien copié !");
                   }
                 }}
-                className="p-2 rounded-full hover:bg-gray-100 transition-all flex-shrink-0"
+                className="p-2 rounded-full hover:bg-gray-100 transition-all"
               >
                 <Share className="w-5 h-5 text-gray-400" />
               </button>
             </div>
-          </div>
-        </motion.div>
-
-        <motion.div
-          className="relative mb-3 overflow-hidden rounded-[32px] px-6"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.16, duration: 0.5 }}
-        >
-          {/* <img
-            src={assetDetailHero}
-            alt="CBPR analyse"
-            className="absolute right-0 bottom-0 h-full pb-4 w-auto object-contain pointer-events-none"
-            loading="eager"
-          /> */}
-
-          <div className="relative z-10 max-w-[52%] sm:max-w-[58%]">
+            <p className="text-gray-600">{asset.name}</p>
+            <p className="text-sm text-gray-500 mt-1">
+              {asset.exchange || "Marché non renseigné"}
+            </p>
             <motion.div
-              className="text-4xl font-semibold text-gray-900 tracking-tight"
+              className="text-4xl font-semibold text-gray-900 mt-3 tracking-tight"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 0.3, duration: 0.5 }}
