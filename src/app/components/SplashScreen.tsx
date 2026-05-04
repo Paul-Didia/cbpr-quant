@@ -8,7 +8,7 @@ interface SplashScreenProps {
 export function SplashScreen({ onComplete }: SplashScreenProps) {
   return (
     <motion.div
-      className="fixed inset-0 z-50 bg-gradient-to-br from-blue-500 via-blue-600 to-blue-700 flex items-center justify-center"
+      className="fixed inset-0 z-50 bg-gradient-to-b from-blue-50 via-white to-gray-50 flex items-center justify-center px-4 overflow-hidden"
       initial={{ opacity: 1 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0, scale: 1.1 }}
@@ -50,7 +50,7 @@ export function SplashScreen({ onComplete }: SplashScreenProps) {
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           transition={{ delay: 0.6, duration: 0.6 }}
-          className="text-blue-100 text-lg"
+          className="text-gray-600 text-lg"
         >
           Quand acheter ?
         </motion.p>
