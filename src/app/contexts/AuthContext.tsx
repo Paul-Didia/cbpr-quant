@@ -16,6 +16,8 @@ interface AuthContextType {
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
   signup: (email: string, password: string, name: string) => Promise<void>;
+  resetPassword: (email: string) => Promise<void>;
+  deleteAccount: () => Promise<void>;
   logout: () => void;
   updateSubscription: (subscription: 'free' | 'pro' | 'quant') => void;
 }
@@ -149,6 +151,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await login(email, password);
   };
 
+  const resetPassword = async (email: string) => {
+    const normalizedEmail = email.trim().toLowerCase();
+
+    if (!normalizedEmail) {
+      throw new Error('Veuillez renseigner votre adresse email.');
+    }
+
+    const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
+      redirectTo: `${window.location.origin}/auth`,
+    });
+
+    if (error) {
+      throw new Error(error.message);
+    }
+  };
+
+  const deleteAccount = async () => {
+    await apiService.deleteAccount();
+    await supabase.auth.signOut();
+    setUser(null);
+    apiService.setToken(null);
+    apiService.setUserEmail(null);
+  };
+
   const logout = async () => {
     await supabase.auth.signOut();
     setUser(null);
@@ -176,6 +202,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isLoading,
         login,
         signup,
+        resetPassword,
+        deleteAccount,
         logout,
         updateSubscription,
       }}

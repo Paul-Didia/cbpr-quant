@@ -1,22 +1,27 @@
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, User, Mail, Bell, Crown, Zap, MessageCircle, TrendingUp, Check, X, LogOut, MessagesSquare } from 'lucide-react';
+import { ArrowLeft, User, Mail, Bell, Crown, Zap, MessageCircle, TrendingUp, Check, X, LogOut, MessagesSquare, KeyRound, Trash2, AlertTriangle } from 'lucide-react';
 import { motion } from 'motion/react';
 import { PageTransition } from '../components/PageTransition';
 import { CbprMethode } from '../components/CbprMethode';
 import { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import mascotLight from '../assets/mascotte_light.svg';
 import mascotProfile from '../assets/mascotte_profile.svg';
 
 export function Profile() {
   const navigate = useNavigate();
-  const { user, logout, updateSubscription } = useAuth();
+  const { user, logout, updateSubscription, resetPassword, deleteAccount } = useAuth();
   const [currentPlan, setCurrentPlan] = useState<'free' | 'pro' | 'quant'>(user?.subscription || 'free');
   const [pendingPlan, setPendingPlan] = useState<'free' | 'pro' | 'quant' | null>(null);
   const [isUpdatingPlan, setIsUpdatingPlan] = useState(false);
   const [subscriptionMessage, setSubscriptionMessage] = useState('');
   const [openCbprMethod, setOpenCbprMethod] = useState(false);
+  const [accountMessage, setAccountMessage] = useState('');
+  const [accountError, setAccountError] = useState('');
+  const [isResettingPassword, setIsResettingPassword] = useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = useState('');
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const displayedPlan = pendingPlan ?? currentPlan;
+  const profileInitial = (user?.name?.trim()?.[0] || user?.email?.trim()?.[0] || 'U').toUpperCase();
 
 
   useEffect(() => {
@@ -76,6 +81,39 @@ export function Profile() {
     logout();
     navigate('/');
   };
+
+  const handleResetPassword = async () => {
+    if (!user?.email || isResettingPassword) return;
+
+    setAccountMessage('');
+    setAccountError('');
+    setIsResettingPassword(true);
+
+    try {
+      await resetPassword(user.email);
+      setAccountMessage('Email de réinitialisation envoyé. Vérifiez votre boîte mail.');
+    } catch (error) {
+      setAccountError(error instanceof Error ? error.message : 'Impossible d’envoyer l’email de réinitialisation.');
+    } finally {
+      setIsResettingPassword(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (deleteConfirmation !== 'SUPPRIMER' || isDeletingAccount) return;
+
+    setAccountMessage('');
+    setAccountError('');
+    setIsDeletingAccount(true);
+
+    try {
+      await deleteAccount();
+      navigate('/');
+    } catch (error) {
+      setAccountError(error instanceof Error ? error.message : 'Impossible de supprimer le compte pour le moment.');
+      setIsDeletingAccount(false);
+    }
+  };
   
   return (
     <PageTransition>
@@ -132,15 +170,12 @@ export function Profile() {
         >
           <div className="flex items-center gap-4 mb-6">
             <motion.div 
-              className="w-20 h-20 bg-gradient-to-br from-blue-500 to-blue-600 rounded-3xl flex items-center justify-center shadow-md overflow-hidden"
+              className="w-20 h-20 bg-gradient-to-br from-blue-500 to-blue-600 rounded-3xl flex items-center justify-center shadow-md text-white text-3xl font-bold tracking-tight"
               whileHover={{ scale: 1.05, rotate: 5 }}
               transition={{ type: "spring", stiffness: 400, damping: 17 }}
+              aria-label="Initiale du profil utilisateur"
             >
-              <img
-                src={mascotLight}
-                alt="CBPR Mascot"
-                className="w-17 h-17 object-contain"
-              />
+              {profileInitial}
             </motion.div>
             <div>
               <div className="mb-2">
@@ -613,9 +648,81 @@ export function Profile() {
                 />
               </label>
             </motion.div>
+
+            <motion.button
+              type="button"
+              onClick={handleResetPassword}
+              disabled={isResettingPassword || !user?.email}
+              className="w-full flex items-center justify-between bg-gray-50 rounded-2xl p-4 text-left disabled:opacity-60 disabled:cursor-not-allowed"
+              whileHover={isResettingPassword ? undefined : { scale: 1.02 }}
+              whileTap={isResettingPassword ? undefined : { scale: 0.98 }}
+            >
+              <div className="flex items-center gap-3">
+                <KeyRound className="w-5 h-5 text-gray-600" />
+                <span className="text-gray-900 font-medium">Réinitialiser mon mot de passe</span>
+              </div>
+              <span className="text-sm text-blue-500 font-medium">
+                {isResettingPassword ? 'Envoi...' : 'Envoyer'}
+              </span>
+            </motion.button>
+
+            {accountMessage && (
+              <div className="rounded-2xl bg-green-50 text-green-700 text-sm font-medium p-4">
+                {accountMessage}
+              </div>
+            )}
+
+            {accountError && (
+              <div className="rounded-2xl bg-red-50 text-red-600 text-sm font-medium p-4">
+                {accountError}
+              </div>
+            )}
           </div>
         </motion.div>
-        
+
+        {/* Danger Zone */}
+        <motion.div 
+          className="bg-white rounded-3xl p-6 mb-6 shadow-sm border border-red-100"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.32, duration: 0.5 }}
+          whileHover={{ boxShadow: '0 10px 25px -5px rgb(0 0 0 / 0.1)' }}
+        >
+          <div className="flex items-start gap-3 mb-4">
+            <div className="w-11 h-11 rounded-2xl bg-red-50 flex items-center justify-center">
+              <AlertTriangle className="w-5 h-5 text-red-500" />
+            </div>
+            <div>
+              <h2 className="font-semibold text-gray-900 text-lg tracking-tight">Zone sensible</h2>
+              <p className="text-sm text-gray-600 leading-relaxed">
+                La suppression du compte est définitive. Vos favoris et données liées au profil seront supprimés.
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <input
+              type="text"
+              value={deleteConfirmation}
+              onChange={(event) => setDeleteConfirmation(event.target.value)}
+              placeholder="Tapez SUPPRIMER pour confirmer"
+              className="w-full px-4 py-3 bg-red-50/60 border border-red-100 rounded-2xl focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-400 transition-all text-sm"
+            />
+
+            <motion.button
+              type="button"
+              onClick={handleDeleteAccount}
+              disabled={deleteConfirmation !== 'SUPPRIMER' || isDeletingAccount}
+              className="w-full bg-red-500 text-white py-3 rounded-2xl font-semibold shadow-lg flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              whileHover={deleteConfirmation !== 'SUPPRIMER' || isDeletingAccount ? undefined : { scale: 1.01 }}
+              whileTap={deleteConfirmation !== 'SUPPRIMER' || isDeletingAccount ? undefined : { scale: 0.99 }}
+              transition={{ type: 'spring', stiffness: 400, damping: 17 }}
+            >
+              <Trash2 className="w-5 h-5" />
+              {isDeletingAccount ? 'Suppression en cours...' : 'Supprimer mon compte'}
+            </motion.button>
+          </div>
+        </motion.div>
         {/* Disclaimer */}
         <motion.div 
           className="rounded-3xl p-5 bg-gradient-to-br from-yellow-50 to-orange-50 border border-yellow-200/50"

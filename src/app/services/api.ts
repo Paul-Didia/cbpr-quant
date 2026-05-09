@@ -100,6 +100,12 @@ export class ApiService {
     return data.profile;
   }
 
+  async deleteAccount() {
+    return this.requestSupabase('/auth/delete-account', {
+      method: 'POST',
+    });
+  }
+
   // ===== SUBSCRIPTION (PYTHON) =====
   async getSubscription(email: string): Promise<'free' | 'pro' | 'quant'> {
     const data = await this.requestPython(
