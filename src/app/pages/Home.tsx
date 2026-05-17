@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Circle, ArrowRight } from "lucide-react";
+import { Circle, ArrowRight, ChevronDown } from "lucide-react";
 import {
   type AssetStatus,
   type AssetType,
@@ -8,10 +8,10 @@ import { useEffect, useMemo, useState } from "react";
 import { motion } from "motion/react";
 import { PageTransition } from "../components/PageTransition";
 import { CbprMethode } from "../components/CbprMethode";
+import { AnalysisModelPopup, ANALYSIS_MODELS, type AnalysisModel } from "../components/AnalysisModelPopup";
 import { AssetIcon } from "../components/AssetIcon";
 import { useFavorites } from "../contexts/FavoritesContext";
 import { apiService } from "../services/api";
-import homeHero from "../assets/home_hero.svg";
 
 type HomeAsset = {
   id: string;
@@ -28,16 +28,30 @@ const LIBRARY_CACHE_KEY = "cbpr_library_cache_v1";
 
 const HOME_ASSET_CACHE_PREFIX = "cbpr_home_asset_";
 const HOME_CACHE_DURATION = 1000 * 60 * 60 * 4; // 4h
+
 const HOME_REFRESH_LIMIT = 7;
 
+const SELECTED_MODEL_STORAGE_KEY = "cbpr_selected_analysis_model";
 
-function getHomeAssetCacheKey(symbol: string) {
-  return `${HOME_ASSET_CACHE_PREFIX}${encodeURIComponent(symbol)}`;
+function getStoredAnalysisModel(): AnalysisModel {
+  try {
+    const storedModel = window.localStorage.getItem(SELECTED_MODEL_STORAGE_KEY);
+    if (storedModel === "volatility_breakout" || storedModel === "mean_reversion" || storedModel === "cbpr") {
+      return storedModel;
+    }
+  } catch { }
+
+  return "cbpr";
 }
 
-function getCachedHomeAsset(symbol: string): HomeAsset | null {
+
+function getHomeAssetCacheKey(symbol: string, model: AnalysisModel) {
+  return `${HOME_ASSET_CACHE_PREFIX}${model}_${encodeURIComponent(symbol)}`;
+}
+
+function getCachedHomeAsset(symbol: string, model: AnalysisModel): HomeAsset | null {
   try {
-    const raw = window.localStorage.getItem(getHomeAssetCacheKey(symbol));
+    const raw = window.localStorage.getItem(getHomeAssetCacheKey(symbol, model));
     if (!raw) return null;
 
     const parsed = JSON.parse(raw);
@@ -52,10 +66,10 @@ function getCachedHomeAsset(symbol: string): HomeAsset | null {
   }
 }
 
-function setCachedHomeAsset(symbol: string, data: HomeAsset) {
+function setCachedHomeAsset(symbol: string, model: AnalysisModel, data: HomeAsset) {
   try {
     window.localStorage.setItem(
-      getHomeAssetCacheKey(symbol),
+      getHomeAssetCacheKey(symbol, model),
       JSON.stringify({
         data,
         timestamp: Date.now(),
@@ -130,11 +144,24 @@ function getCachedLibraryAssets(): Array<{
   }
 }
 
+
 export function Home() {
   const { favorites } = useFavorites();
   const [openCbprMethod, setOpenCbprMethod] = useState(false);
   const [watchedAssets, setWatchedAssets] = useState<HomeAsset[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [selectedModel, setSelectedModel] = useState<AnalysisModel>(() => getStoredAnalysisModel());
+  const [openModelPopup, setOpenModelPopup] = useState(false);
+  const selectedModelInfo = useMemo(
+    () => ANALYSIS_MODELS.find((model) => model.id === selectedModel) || ANALYSIS_MODELS[0],
+    [selectedModel],
+  );
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(SELECTED_MODEL_STORAGE_KEY, selectedModel);
+    } catch { }
+  }, [selectedModel]);
 
   useEffect(() => {
     window.scrollTo({
@@ -161,7 +188,7 @@ export function Home() {
     const cachedLibrary = getCachedLibraryAssets();
 
     const immediateAssets = favorites.map((symbol) => {
-      const cachedAsset = getCachedHomeAsset(symbol);
+      const cachedAsset = getCachedHomeAsset(symbol, selectedModel);
       if (cachedAsset) {
         return cachedAsset;
       }
@@ -181,7 +208,7 @@ export function Home() {
 
     const symbolsToRefresh = favorites
       .slice(0, HOME_REFRESH_LIMIT)
-      .filter((symbol) => !getCachedHomeAsset(symbol));
+      .filter((symbol) => !getCachedHomeAsset(symbol, selectedModel));
 
     if (!isCancelled) {
       setWatchedAssets(immediateAssets);
@@ -202,7 +229,7 @@ export function Home() {
         const refreshedResults = await Promise.all(
           symbolsToRefresh.map(async (symbol): Promise<HomeAsset | null> => {
             try {
-              const analysisResponse = await apiService.getAnalysis(symbol);
+              const analysisResponse = await apiService.getAnalysis(symbol, "4h", 300, selectedModel);
 
               const quote = analysisResponse?.quote || {};
               const analysis = analysisResponse?.analysis || {};
@@ -227,7 +254,7 @@ export function Home() {
                 status: mapSignalToStatus(signal),
               };
 
-              setCachedHomeAsset(symbol, mappedAsset);
+              setCachedHomeAsset(symbol, selectedModel, mappedAsset);
               return mappedAsset;
             } catch (error) {
               console.error(`Error loading favorite ${symbol}:`, error);
@@ -263,7 +290,7 @@ export function Home() {
     return () => {
       isCancelled = true;
     };
-  }, [favorites]);
+  }, [favorites, selectedModel]);
 
   const displayedAssets = useMemo(() => {
     const watchedMap = new Map(watchedAssets.map((asset) => [asset.id, asset]));
@@ -343,7 +370,7 @@ export function Home() {
   if (!isRefreshing && favorites.length === 0) {
     return (
       <PageTransition>
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 text-white">
 
           <motion.div
             className="flex items-center gap-3 mb-6"
@@ -365,16 +392,16 @@ export function Home() {
 
           <motion.div className="max-w-md mx-auto text-center space-y-8 py-16">
             <div className="space-y-3">
-              <h2 className="text-xl font-semibold text-gray-900 tracking-tight">
+              <h2 className="text-xl font-semibold text-white tracking-tight">
                 Aucun actif suivi
               </h2>
-              <p className="text-gray-600 leading-relaxed px-4">
+              <p className="text-[#a3aab8] leading-relaxed px-4">
                 Commencez par ajouter des actifs à votre liste depuis la bibliothèque.
               </p>
             </div>
 
             <Link to="/library">
-              <motion.button className="inline-flex items-center gap-2 bg-blue-500 text-white py-3.5 px-6 rounded-2xl font-medium">
+              <motion.button className="inline-flex items-center gap-2 bg-[#262730] border border-white/15 text-white py-3.5 px-6 rounded-2xl font-medium shadow-lg shadow-black/30">
                 Parcourir la bibliothèque
                 <ArrowRight className="w-4 h-4" />
               </motion.button>
@@ -391,20 +418,15 @@ export function Home() {
   }
 
   return (
-    <div>
-      <div className="relative min-h-screen overflow-hidden bg-[#f9fafb] pb-24">
+    <div className="bg-[#28374D] text-white">
+      <div className="relative min-h-screen overflow-hidden bg-[#28374D] pb-24">
 
         <section
-          className="fixed left-0 right-0 top-0 z-0 h-[360px] lg:h-[500px] overflow-hidden bg-[#061a3a] px-6 pt-16 sm:px-8 lg:px-12"
+          className="fixed left-0 right-0 top-0 z-0 h-[240px] lg:h-[320px] overflow-hidden bg-[#28374D] px-6 pt-12 sm:px-8 lg:px-12"
         >
-          <img
-            src={homeHero}
-            alt="CBPR Quant"
-            className="absolute inset-0 h-full lg:top-[-200px] lg:h-[700px] w-full object-cover"
-            loading="eager"
-          />
 
           <div className="relative z-10 max-w-7xl mx-auto">
+
             <h1
               className="text-[28px] font-semibold tracking-tight text-white"
               style={{
@@ -415,7 +437,7 @@ export function Home() {
               Mes actifs suivis
             </h1>
 
-            <div className="mt-6">
+            <div className="mt-2">
               <div className="text-sm text-white/80">Valeur théorique suivie</div>
 
               <motion.div
@@ -446,11 +468,30 @@ export function Home() {
         </section>
 
         <PageTransition>
-          <div className="relative z-10 mt-[305px] rounded-t-[32px] bg-[#f9fafb] px-4 pb-6 pt-6 sm:px-6 lg:mt-[500px] lg:px-8">
+          <div className="relative z-10 mt-[220px] bg-[#28374D] px-4 pb-6 pt-6 sm:px-6 lg:mt-[250px] lg:px-8">
             <div className="mx-auto max-w-7xl">
-              <div className="mb-4 text-sm text-gray-500">
-                Analyse en temps réel 4H
+
+
+              <div className="relative flex z-10 max-w-7xl mx-auto">
+
+                <div className="mb-4 text-sm text-[#a3aab8]">
+                  Analyse en temps réel 4H
+                </div>
+
+                <div className="ml-auto mb-5">
+                  <button
+                    type="button"
+                    onClick={() => setOpenModelPopup(true)}
+                    className="flex items-center gap-2 appearance-none bg-blue-500 rounded-2xl border border-white/5 active:bg-[#1f2937] transition-colors shadow-sm shadow-blue-500/20 py-2 pl-4 pr-3 text-sm focus:outline-none"
+                  >
+                    <span>{selectedModelInfo.shortLabel}</span>
+                    <ChevronDown className="h-4 w-4 text-gray-200" />
+                  </button>
+                </div>
+
               </div>
+
+
               <div className="space-y-3">
                 {displayedAssets.map((asset, index) => {
                   const isPending = asset.currentPrice <= 0;
@@ -462,8 +503,8 @@ export function Home() {
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: index * 0.08, duration: 0.35 }}
                     >
-                      <Link to={`/asset/${encodeURIComponent(asset.id)}`}>
-                        <div className="block bg-white rounded-2xl p-4 border border-gray-100 active:bg-gray-50 transition-colors">
+                      <Link to={`/asset/${encodeURIComponent(asset.id)}?model=${selectedModel}`}>
+                        <div className="block bg-[#1E2939] rounded-2xl p-4 border border-white/1 active:bg-[#1f2937] transition-colors shadow-lg shadow-black/20">
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-4 flex-1">
                               <AssetIcon
@@ -475,7 +516,7 @@ export function Home() {
 
                               <div className="flex-1">
                                 <div className="flex items-center gap-2">
-                                  <span className="font-semibold text-gray-900 tracking-tight">
+                                  <span className="font-semibold text-white tracking-tight">
                                     {asset.symbol}
                                   </span>
                                   <motion.span
@@ -487,21 +528,21 @@ export function Home() {
                                   </motion.span>
                                 </div>
 
-                                <div className="text-sm text-gray-500 mt-0.5">
+                                <div className="text-sm text-[#a3aab8] mt-0.5">
                                   {isPending
                                     ? "Signal en cours..."
                                     : getStatusLabel(asset.status)}
                                 </div>
                               </div>
 
-                              <div className="text-right font-semibold text-gray-900 tracking-tight">
+                              <div className="text-right font-semibold text-white tracking-tight">
                                 {isPending
                                   ? "--"
                                   : `${asset.currentPrice.toFixed(2)}€`}
                               </div>
                             </div>
 
-                            <ArrowRight className="w-5 h-5 text-gray-400 ml-4" />
+                            <ArrowRight className="w-5 h-5 text-[#6b7280] ml-4" />
                           </div>
                         </div>
                       </Link>
@@ -509,11 +550,18 @@ export function Home() {
                   );
                 })}
               </div>
+
             </div>
           </div>
         </PageTransition>
 
       </div>
+      <AnalysisModelPopup
+        isOpen={openModelPopup}
+        selectedModel={selectedModel}
+        onApply={setSelectedModel}
+        onClose={() => setOpenModelPopup(false)}
+      />
       <CbprMethode
         isOpen={openCbprMethod}
         onClose={() => setOpenCbprMethod(false)}

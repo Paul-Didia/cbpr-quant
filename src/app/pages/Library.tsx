@@ -6,7 +6,6 @@ import { PageTransition } from "../components/PageTransition";
 import { AssetIcon } from "../components/AssetIcon";
 import { type AssetType } from "../data/mockAssets";
 import { useFavorites } from "../contexts/FavoritesContext";
-import { useAuth } from "../contexts/AuthContext";
 import { apiService } from "../services/api";
 import { useWebHaptics } from "web-haptics/react";
 
@@ -18,46 +17,28 @@ type LibraryAsset = {
   logo?: string;
 };
 
-type UserPlan = "free" | "pro" | "quant";
 
-const FREE_STOCK_SYMBOLS = new Set([
-  "AAPL", "MSFT", "AMZN", "GOOGL", "META", "NVDA", "TSLA", "JPM", "JNJ", "V",
-  "WMT", "PG", "XOM", "UNH", "KO", "DIS", "NFLX", "INTC", "AMD", "CSCO",
-  "ORCL", "IBM", "BA", "NKE", "PFE", "MRK", "CVX", "MCD", "COST", "PEP",
-  "ABT", "AVGO", "TMO", "ACN", "QCOM", "TXN", "HON", "LIN", "UPS", "PM",
-  "RTX", "LOW", "INTU", "AMGN", "SPGI", "CAT", "GS", "DE", "BLK", "MDT",
-  "ISRG", "NOW", "BKNG", "ADBE", "PLD", "SYK", "GILD", "ADI", "VRTX", "ZTS",
-  "CB", "CI", "MO", "LMT", "SCHW", "DUK", "MMC", "SO", "USB", "BDX",
-  "FIS", "PNC", "T", "APD", "CSX", "NSC", "ICE", "GM", "F", "ETN",
-  "EMR", "EOG", "MPC", "PSX", "KMI", "SLB", "COP", "HAL", "DVN", "OXY",
-  "AIG", "MET", "PRU", "ALL", "TRV", "AXP", "COF", "DFS", "PYPL", "SQ",
-  "CRM", "SNOW", "SHOP", "UBER", "LYFT", "TWLO", "DDOG", "NET", "OKTA", "ZS",
-  "CRWD", "PANW", "FTNT", "TEAM", "WDAY", "DOCU", "ROKU", "TTD", "SPOT", "EA",
-  "ATVI", "TTWO", "RBLX", "U", "PLTR", "AI", "SMCI", "MRVL", "KLAC", "LRCX",
-  "ASML", "NXPI", "ON", "MPWR", "SWKS", "QRVO", "CDNS", "SNPS", "ANSS", "PAYC",
-  "PAYX", "ADP", "HPQ", "DELL", "HPE", "SONY", "NTDOY", "BABA", "JD",
-  "PDD", "TCEHY", "BIDU", "SE", "MELI", "TSM", "INFY", "SAP", "ORAN", "VOD"
-]);
-
-const FREE_CRYPTO_SYMBOLS = new Set([
-  "BTC/USD", "ETH/USD", "SOL/USD", "XRP/USD", "BNB/USD",
-]);
-
-const PRO_CRYPTO_SYMBOLS = new Set([
-  "ADA/USD", "DOGE/USD", "AVAX/USD", "LINK/USD", "DOT/USD",
-  "TRX/USD", "TON/USD", "MATIC/USD", "SHIB/USD", "BCH/USD",
-]);
-
-const FREE_ETF_SYMBOLS = new Set([
-  "SPY", "QQQ", "VTI", "IVV", "VT",
-]);
-
-const PRO_ETF_SYMBOLS = new Set([
-  "IWM", "DIA", "XLK", "VEA", "EEM",
-  "VWO", "XLF", "XLE", "ARKK", "VNQ",
-]);
 
 const LIBRARY_CACHE_KEY = "cbpr_library_cache_v1";
+
+type AnalysisModel = "cbpr" | "volatility_breakout" | "mean_reversion";
+
+const SELECTED_MODEL_STORAGE_KEY = "cbpr_selected_analysis_model";
+
+function getStoredAnalysisModel(): AnalysisModel {
+  try {
+    const storedModel = window.localStorage.getItem(SELECTED_MODEL_STORAGE_KEY);
+    if (
+      storedModel === "cbpr" ||
+      storedModel === "volatility_breakout" ||
+      storedModel === "mean_reversion"
+    ) {
+      return storedModel;
+    }
+  } catch { }
+
+  return "cbpr";
+}
 
 function normalizeAssetType(
   rawType?: string,
@@ -153,55 +134,6 @@ function rankSearchResults(results: LibraryAsset[], query: string): LibraryAsset
     .map((item) => item.asset);
 }
 
-function normalizeAccessSymbol(symbol?: string) {
-  return String(symbol || "").trim().toUpperCase();
-}
-
-function getRequiredPlanForAsset(asset: LibraryAsset): UserPlan {
-  const symbol = normalizeAccessSymbol(asset.symbol);
-
-  if (asset.assetType === "forex") {
-    return "quant";
-  }
-
-  if (asset.assetType === "crypto") {
-    if (FREE_CRYPTO_SYMBOLS.has(symbol)) return "free";
-    if (PRO_CRYPTO_SYMBOLS.has(symbol)) return "pro";
-    return "quant";
-  }
-
-  if (asset.assetType === "etf") {
-    if (FREE_ETF_SYMBOLS.has(symbol)) return "free";
-    if (PRO_ETF_SYMBOLS.has(symbol)) return "pro";
-    return "quant";
-  }
-
-  if (asset.assetType === "stock") {
-    return FREE_STOCK_SYMBOLS.has(symbol) ? "free" : "pro";
-  }
-
-  return "quant";
-}
-
-function isAssetAllowedForPlan(asset: LibraryAsset, plan: UserPlan): boolean {
-  const requiredPlan = getRequiredPlanForAsset(asset);
-
-  if (plan === "quant") return true;
-  if (plan === "pro") return requiredPlan !== "quant";
-  return requiredPlan === "free";
-}
-
-function getPlanBadgeClasses(plan: UserPlan): string {
-  if (plan === "quant") return "bg-gradient-to-r from-yellow-400 to-orange-500 text-white";
-  if (plan === "pro") return "bg-gradient-to-r from-purple-500 to-fuchsia-500 text-white";
-  return "bg-gray-100 text-gray-700";
-}
-
-function getPlanLabel(plan: UserPlan): string {
-  if (plan === "quant") return "Quant";
-  if (plan === "pro") return "Pro";
-  return "Free";
-}
 
 export function Library() {
   const { addFavorite, removeFavorite, isFavorite, favorites } = useFavorites() as {
@@ -211,10 +143,10 @@ export function Library() {
     favorites?: string[];
   };
   const { trigger } = useWebHaptics();
+  const selectedModel = getStoredAnalysisModel();
   const triggerAssetTap = () => trigger("light");
   const triggerFavoriteTap = () => trigger("success");
   const triggerMediumTap = () => trigger("medium");
-  const { user } = useAuth();
   const [optimisticFavorites, setOptimisticFavorites] = useState<Record<string, boolean>>({});
   const [favoriteBursts, setFavoriteBursts] = useState<Record<string, number>>({});
   const lastFavoriteActionRef = useRef<Record<string, number>>({});
@@ -239,8 +171,6 @@ export function Library() {
 
     setSearchQuery(value);
   };
-
-  const currentPlan: UserPlan = user?.subscription || "free";
 
   const getFavoriteState = (assetId: string) => {
     return assetId in optimisticFavorites
@@ -270,11 +200,6 @@ export function Library() {
 
     const targetAsset = assets.find((item) => item.id === assetId);
     if (!targetAsset) return;
-
-    const isAllowed = isAssetAllowedForPlan(targetAsset, currentPlan);
-    if (!isAllowed) {
-      return;
-    }
 
     const currentValue = getFavoriteState(assetId);
     const nextValue = !currentValue;
@@ -459,20 +384,20 @@ export function Library() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: index * 0.04, duration: 0.25 }}
-          className="bg-white rounded-2xl p-4 border border-gray-100"
+          className="bg-[#111827] rounded-2xl p-4 border border-white/10 shadow-lg shadow-black/20"
         >
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4 flex-1">
-              <div className="w-22 h-22 rounded-2xl bg-gray-100 animate-pulse" />
+              <div className="w-22 h-22 rounded-2xl bg-[#262730] animate-pulse" />
 
               <div className="flex-1 space-y-2">
-                <div className="h-5 w-24 bg-gray-100 rounded-md animate-pulse" />
-                <div className="h-3 w-40 bg-gray-100 rounded-md animate-pulse" />
+                <div className="h-5 w-24 bg-[#262730] rounded-md animate-pulse" />
+                <div className="h-3 w-40 bg-[#262730] rounded-md animate-pulse" />
               </div>
 
-              <div className="w-9 h-9 rounded-full bg-gray-100 animate-pulse" />
+              <div className="w-9 h-9 rounded-full bg-[#262730] animate-pulse" />
 
-              <div className="w-20 h-5 bg-gray-100 rounded-md animate-pulse" />
+              <div className="w-20 h-5 bg-[#262730] rounded-md animate-pulse" />
             </div>
           </div>
         </motion.div>
@@ -482,7 +407,7 @@ export function Library() {
 
   return (
     <PageTransition>
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-28 overflow-x-hidden">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-28 overflow-x-hidden bg-[#28374D] text-white">
         <motion.h1
           className="text-[28px] font-semibold mb-6 tracking-tight"
           style={{
@@ -503,13 +428,13 @@ export function Library() {
           transition={{ delay: 0.1, duration: 0.5 }}
         >
           <div className="relative">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[#6b7280]" />
             <input
               type="text"
               placeholder="Rechercher un actif..."
               value={searchQuery}
               onChange={(e) => handleSearchChange(e.target.value)}
-              className="w-full pl-12 pr-12 py-3.5 bg-white border border-gray-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-gray-900 placeholder-gray-400"
+              className="w-full pl-12 pr-12 py-3.5 bg-[#1f2937] border rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-white placeholder:text-gray-400"
             />
             <AnimatePresence>
               {searchQuery && (
@@ -521,11 +446,11 @@ export function Library() {
                     triggerMediumTap();
                     setSearchQuery("");
                   }}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 p-1 hover:bg-gray-100 rounded-full transition-all"
+                  className="absolute right-4 top-1/2 -translate-y-1/2 p-1 hover:bg-white/10 rounded-full transition-all"
                   whileHover={{ scale: 1.1 }}
                   whileTap={{ scale: 0.9 }}
                 >
-                  <X className="w-4 h-4 text-gray-400" />
+                  <X className="w-4 h-4 text-[#6b7280]" />
                 </motion.button>
               )}
             </AnimatePresence>
@@ -533,7 +458,7 @@ export function Library() {
         </motion.div>
 
         <motion.div
-          className="mb-6 flex gap-2 overflow-x-auto pb-2 scrollbar-hide"
+          className="mb-6 flex gap-2 overflow-x-auto p-2 scrollbar-hide"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.15, duration: 0.5 }}
@@ -545,10 +470,11 @@ export function Library() {
                 triggerMediumTap();
                 setSelectedCategory(category.id);
               }}
-              className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all ${selectedCategory === category.id
-                ? "bg-blue-500 text-white"
-                : "bg-white text-gray-700 border border-gray-200 hover:border-blue-300"
-                }`}
+              className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all ${
+                selectedCategory === category.id
+                  ? "bg-blue-500 text-white border border-blue-500 shadow shadow-blue-500/20"
+                  : "bg-[#1f2937] text-white-700 hover:border-blue-300"
+              }`}
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{
@@ -567,7 +493,7 @@ export function Library() {
         <AnimatePresence>
           {!isLoading && (
             <motion.div
-              className="mb-4 text-sm text-gray-600"
+              className="mb-4 text-sm text-[#a3aab8]"
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: "auto" }}
               exit={{ opacity: 0, height: 0 }}
@@ -588,13 +514,13 @@ export function Library() {
             initial={{ opacity: 0, scale: 0.96 }}
             animate={{ opacity: 1, scale: 1 }}
           >
-            <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4">
-              <X className="w-8 h-8 text-red-400" />
+            <div className="w-16 h-16 bg-red-500/10 border border-red-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+              <X className="w-8 h-8 text-red-300" />
             </div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">
+            <h3 className="text-lg font-semibold text-white mb-2">
               Erreur de chargement
             </h3>
-            <p className="text-gray-600">{errorMessage}</p>
+            <p className="text-[#a3aab8]">{errorMessage}</p>
           </motion.div>
         ) : filteredAssets.length === 0 ? (
           <motion.div
@@ -603,13 +529,13 @@ export function Library() {
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.5 }}
           >
-            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Search className="w-8 h-8 text-gray-400" />
+            <div className="w-16 h-16 bg-[#262730] border border-white/10 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Search className="w-8 h-8 text-[#6b7280]" />
             </div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">
+            <h3 className="text-lg font-semibold text-white mb-2">
               Aucun actif trouvé
             </h3>
-            <p className="text-gray-600">
+            <p className="text-[#a3aab8]">
               Essayez une autre recherche
             </p>
           </motion.div>
@@ -618,8 +544,6 @@ export function Library() {
             {filteredAssets.map((asset, index) => {
               const isWatched = getFavoriteState(asset.id);
               const burstKey = favoriteBursts[asset.id] || 0;
-              const requiredPlan = getRequiredPlanForAsset(asset);
-              const isAllowed = isAssetAllowedForPlan(asset, currentPlan);
 
               return (
                 <motion.div
@@ -628,86 +552,11 @@ export function Library() {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.18 }}
                 >
-                  {isAllowed ? (
-                    <Link
-                      to={`/asset/${encodeURIComponent(asset.id)}`}
-                      onClick={triggerAssetTap}
-                    >
-                      <div className="block bg-white rounded-2xl p-4 border border-gray-100 active:bg-gray-50 transition-colors">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-4 flex-1">
-                            <AssetIcon
-                              logo=""
-                              name={asset.name}
-                              assetType={asset.assetType}
-                              size="md"
-                            />
-
-                            <div className="flex-1">
-                              <div className="items-baseline gap-2">
-                                <p className="font-semibold text-gray-900 tracking-tight">
-                                  {asset.symbol}
-                                </p>
-                                <p className="text-[10px] text-gray-500">
-                                  {asset.name}
-                                </p>
-                              </div>
-                              <div className="mt-2 flex items-center gap-2 flex-wrap">
-                                <span
-                                  className={`inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-semibold ${getPlanBadgeClasses(requiredPlan)}`}
-                                >
-                                  {getPlanLabel(requiredPlan)}
-                                </span>
-                              </div>
-                            </div>
-
-                            <motion.button
-                              onClick={(e) => toggleWatchlist(asset.id, e)}
-                              className="p-2 rounded-full transition-all relative overflow-hidden isolate hover:bg-gray-100"
-                              whileHover={{ scale: 1.1 }}
-                              whileTap={{ scale: 0.85 }}
-                            >
-                              {isWatched && (
-                                <motion.div
-                                  key={`favorite-burst-${asset.id}-${burstKey}`}
-                                  className="absolute inset-0 rounded-full pointer-events-none z-0"
-                                  initial={{ scale: 0.2, opacity: 0.9 }}
-                                  animate={{ scale: 2, opacity: 0 }}
-                                  transition={{ duration: 0.5, ease: "easeOut" }}
-                                  style={{
-                                    background:
-                                      "conic-gradient(from 0deg, #ff0080, #7928ca, #0070f3, #00c853, #ffeb3b, #ff6d00, #ff0080)",
-                                  }}
-                                />
-                              )}
-
-                              <motion.div
-                                key={`star-${asset.id}-${isWatched}-${burstKey}`}
-                                initial={isWatched ? { scale: 0.7, rotate: -15 } : { scale: 1 }}
-                                animate={
-                                  isWatched
-                                    ? { scale: [0.7, 1.3, 1], rotate: [0, -10, 8, 0] }
-                                    : { scale: [1, 0.88, 1], rotate: [0, -8, 0] }
-                                }
-                                transition={{ duration: 0.45, ease: "easeOut" }}
-                                className="relative z-10 pointer-events-none"
-                              >
-                                <Star
-                                  className={`w-5 h-5 transition-colors duration-200 ${isWatched ? "fill-yellow-400 text-yellow-400" : "text-gray-400"
-                                    }`}
-                                />
-                              </motion.div>
-                            </motion.button>
-
-                            <div className="w-4" />
-                          </div>
-
-                          <ArrowRight className="w-5 h-5 text-gray-400 ml-4" />
-                        </div>
-                      </div>
-                    </Link>
-                  ) : (
-                    <div className="block bg-white rounded-2xl p-4 border border-gray-100 transition-colors opacity-75">
+                  <Link
+                    to={`/asset/${encodeURIComponent(asset.id)}?model=${selectedModel}`}
+                    onClick={triggerAssetTap}
+                  >
+                    <div className="block bg-[#1E2939] rounded-2xl p-4 border border-white/1 active:bg-[#1f2937] transition-colors shadow-lg shadow-black/20">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-4 flex-1">
                           <AssetIcon
@@ -719,30 +568,35 @@ export function Library() {
 
                           <div className="flex-1">
                             <div className="items-baseline gap-2">
-                              <p className="font-semibold text-gray-900 tracking-tight">
+                              <p className="font-semibold text-white tracking-tight">
                                 {asset.symbol}
                               </p>
-                              <p className="text-[10px] text-gray-500">
+                              <p className="text-[10px] text-[#a3aab8]">
                                 {asset.name}
                               </p>
-                            </div>
-                            <div className="mt-2 flex items-center gap-2 flex-wrap">
-                              <span
-                                className={`inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-semibold ${getPlanBadgeClasses(requiredPlan)}`}
-                              >
-                                {getPlanLabel(requiredPlan)}
-                              </span>
-                              <span className="text-[10px] text-gray-500">
-                                Disponible avec le plan {getPlanLabel(requiredPlan)}
-                              </span>
                             </div>
                           </div>
 
                           <motion.button
                             onClick={(e) => toggleWatchlist(asset.id, e)}
-                            className="p-2 rounded-full transition-all relative overflow-hidden isolate bg-gray-50 cursor-not-allowed opacity-50"
-                            disabled
+                            className="p-2 rounded-full transition-all relative overflow-hidden isolate hover:bg-white/10"
+                            whileHover={{ scale: 1.1 }}
+                            whileTap={{ scale: 0.85 }}
                           >
+                            {isWatched && (
+                              <motion.div
+                                key={`favorite-burst-${asset.id}-${burstKey}`}
+                                className="absolute inset-0 rounded-full pointer-events-none z-0"
+                                initial={{ scale: 0.2, opacity: 0.9 }}
+                                animate={{ scale: 2, opacity: 0 }}
+                                transition={{ duration: 0.5, ease: "easeOut" }}
+                                style={{
+                                  background:
+                                    "conic-gradient(from 0deg, #ff0080, #7928ca, #0070f3, #00c853, #ffeb3b, #ff6d00, #ff0080)",
+                                }}
+                              />
+                            )}
+
                             <motion.div
                               key={`star-${asset.id}-${isWatched}-${burstKey}`}
                               initial={isWatched ? { scale: 0.7, rotate: -15 } : { scale: 1 }}
@@ -755,7 +609,7 @@ export function Library() {
                               className="relative z-10 pointer-events-none"
                             >
                               <Star
-                                className={`w-5 h-5 transition-colors duration-200 ${isWatched ? "fill-yellow-400 text-yellow-400" : "text-gray-400"
+                                className={`w-5 h-5 transition-colors duration-200 ${isWatched ? "fill-yellow-400 text-yellow-400" : "text-[#6b7280]"
                                   }`}
                               />
                             </motion.div>
@@ -764,12 +618,10 @@ export function Library() {
                           <div className="w-4" />
                         </div>
 
-                        <div className="text-[10px] text-gray-400 ml-4 font-medium">
-                          Plan {getPlanLabel(requiredPlan)}
-                        </div>
+                        <ArrowRight className="w-5 h-5 text-[#6b7280] ml-4" />
                       </div>
                     </div>
-                  )}
+                  </Link>
                 </motion.div>
               );
             })}

@@ -452,4 +452,799 @@ app.post("/make-server-819c6d9b/subscription", async (c: Context) => {
   return c.json({ subscription });
 });
 
+// ===== GROUPS ROUTES =====
+
+app.get("/make-server-819c6d9b/groups", async (c: Context) => {
+  const { error, user } = await verifyUser(c.req.header('Authorization'));
+
+  if (error || !user) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+
+  try {
+    const { data: createdGroups, error: createdGroupsError } = await supabase
+      .from('groups')
+      .select('id, name, created_by')
+      .eq('created_by', user.id);
+
+    if (createdGroupsError) {
+      console.log('Created groups fetch error:', createdGroupsError);
+      return c.json({ error: createdGroupsError.message }, 500);
+    }
+
+    const { data: memberships, error: membershipsError } = await supabase
+      .from('group_members')
+      .select('group_id, role')
+      .eq('user_id', user.id);
+
+    if (membershipsError) {
+      console.log('Memberships fetch warning:', membershipsError);
+    }
+
+    const membershipRows = membershipsError ? [] : memberships || [];
+    const createdGroupIds = (createdGroups || []).map((group: any) => group.id);
+    const membershipGroupIds = membershipRows.map((membership: any) => membership.group_id);
+    const groupIds = Array.from(new Set([...createdGroupIds, ...membershipGroupIds])).filter(Boolean);
+
+    if (groupIds.length === 0) {
+      return c.json({ groups: [] });
+    }
+
+    const { data: groupRows, error: groupRowsError } = await supabase
+      .from('groups')
+      .select('id, name, created_by')
+      .in('id', groupIds);
+
+    if (groupRowsError) {
+      console.log('Groups fetch error:', groupRowsError);
+      return c.json({ error: groupRowsError.message }, 500);
+    }
+
+    const { data: memberRows, error: memberRowsError } = await supabase
+      .from('group_members')
+      .select('group_id, user_id, role')
+      .in('group_id', groupIds);
+
+    if (memberRowsError) {
+      console.log('Members fetch warning:', memberRowsError);
+    }
+
+    const safeMemberRows = memberRowsError ? [] : memberRows || [];
+
+    const groups = (groupRows || []).map((group: any) => {
+      const membership = membershipRows.find((row: any) => row.group_id === group.id);
+      const userRole = group.created_by === user.id || membership?.role === 'owner' ? 'owner' : 'member';
+      const members = safeMemberRows
+        .filter((member: any) => member.group_id === group.id)
+        .map((member: any) => ({
+          id: member.user_id,
+          label: member.user_id === user.id ? user.email || 'Utilisateur' : `Membre ${String(member.user_id).slice(0, 6)}`,
+          role: member.role === 'owner' ? 'owner' : 'member',
+        }));
+
+      return {
+        id: group.id,
+        name: group.name,
+        role: userRole,
+        members: members.length > 0
+          ? members
+          : [
+              {
+                id: user.id,
+                label: user.email || 'Utilisateur',
+                role: userRole,
+              },
+            ],
+      };
+    });
+
+    return c.json({ groups });
+  } catch (error) {
+    console.log('Groups route error:', error);
+    return c.json({ error: 'Failed to fetch groups' }, 500);
+  }
+});
+
+app.post("/make-server-819c6d9b/groups", async (c: Context) => {
+  const { error, user } = await verifyUser(c.req.header('Authorization'));
+
+  if (error || !user) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+
+  try {
+    const { name, password } = await c.req.json();
+    const trimmedName = String(name || '').trim();
+    const trimmedPassword = String(password || '').trim();
+
+    if (!trimmedName || !trimmedPassword) {
+      return c.json({ error: 'Group name and password are required' }, 400);
+    }
+
+    const groupId = crypto.randomUUID();
+
+    const { data: group, error: groupError } = await supabase
+      .from('groups')
+      .insert({
+        id: groupId,
+        name: trimmedName,
+        password: trimmedPassword,
+        created_by: user.id,
+      })
+      .select('id, name, created_by')
+      .single();
+
+    if (groupError) {
+      console.log('Create group error:', groupError);
+      return c.json({ error: groupError.message }, 500);
+    }
+
+    const { error: memberError } = await supabase
+      .from('group_members')
+      .insert({
+        group_id: groupId,
+        user_id: user.id,
+        role: 'owner',
+      });
+
+    if (memberError) {
+      console.log('Create group member error:', memberError);
+      await supabase.from('groups').delete().eq('id', groupId);
+      return c.json({ error: memberError.message }, 500);
+    }
+
+    return c.json({
+      group: {
+        id: group.id,
+        name: group.name,
+        role: 'owner',
+        members: [
+          {
+            id: user.id,
+            label: user.email || 'Utilisateur',
+            role: 'owner',
+          },
+        ],
+      },
+    });
+  } catch (error) {
+    console.log('Create group route error:', error);
+    return c.json({ error: 'Failed to create group' }, 500);
+  }
+});
+
+app.post("/make-server-819c6d9b/groups/join", async (c: Context) => {
+  const { error, user } = await verifyUser(c.req.header('Authorization'));
+
+  if (error || !user) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+
+  try {
+    const { groupId, password } = await c.req.json();
+    const groupIdentifier = String(groupId || '').trim();
+    const trimmedPassword = String(password || '').trim();
+
+    if (!groupIdentifier || !trimmedPassword) {
+      return c.json({ error: 'Group identifier and password are required' }, 400);
+    }
+
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(groupIdentifier);
+
+    let groupQuery = supabase
+      .from('groups')
+      .select('id, name, created_by')
+      .eq('password', trimmedPassword);
+
+    groupQuery = isUuid
+      ? groupQuery.eq('id', groupIdentifier)
+      : groupQuery.eq('name', groupIdentifier);
+
+    const { data: group, error: groupError } = await groupQuery.maybeSingle();
+
+    if (groupError) {
+      console.log('Find group error:', groupError);
+      return c.json({ error: groupError.message }, 500);
+    }
+
+    if (!group?.id) {
+      return c.json({ error: 'Group not found or invalid password' }, 404);
+    }
+
+    const role = group.created_by === user.id ? 'owner' : 'member';
+
+    const { error: memberError } = await supabase
+      .from('group_members')
+      .upsert({
+        group_id: group.id,
+        user_id: user.id,
+        role,
+      }, {
+        onConflict: 'group_id,user_id',
+      });
+
+    if (memberError) {
+      console.log('Join group error:', memberError);
+      return c.json({ error: memberError.message }, 500);
+    }
+
+    const { data: memberRows, error: memberRowsError } = await supabase
+      .from('group_members')
+      .select('group_id, user_id, role')
+      .eq('group_id', group.id);
+
+    const members = memberRowsError
+      ? [
+          {
+            id: user.id,
+            label: user.email || 'Utilisateur',
+            role,
+          },
+        ]
+      : (memberRows || []).map((member: any) => ({
+          id: member.user_id,
+          label: member.user_id === user.id ? user.email || 'Utilisateur' : `Membre ${String(member.user_id).slice(0, 6)}`,
+          role: member.role === 'owner' ? 'owner' : 'member',
+        }));
+
+    return c.json({
+      group: {
+        id: group.id,
+        name: group.name,
+        role,
+        members,
+      },
+    });
+  } catch (error) {
+    console.log('Join group route error:', error);
+    return c.json({ error: 'Failed to join group' }, 500);
+  }
+});
+
+app.delete("/make-server-819c6d9b/groups/:groupId/members/:userId", async (c: Context) => {
+  const { error, user } = await verifyUser(c.req.header('Authorization'));
+
+  if (error || !user) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+
+  try {
+    const groupId = c.req.param('groupId');
+    const targetUserId = c.req.param('userId');
+
+    if (!groupId || !targetUserId) {
+      return c.json({ error: 'Group id and user id are required' }, 400);
+    }
+
+    const { data: group, error: groupError } = await supabase
+      .from('groups')
+      .select('id, created_by')
+      .eq('id', groupId)
+      .maybeSingle();
+
+    if (groupError) {
+      console.log('Find group for member delete error:', groupError);
+      return c.json({ error: groupError.message }, 500);
+    }
+
+    if (!group?.id) {
+      return c.json({ error: 'Group not found' }, 404);
+    }
+
+    const isOwner = group.created_by === user.id;
+    const isLeavingSelf = targetUserId === user.id;
+
+    if (!isOwner && !isLeavingSelf) {
+      return c.json({ error: 'Only group owner can remove another member' }, 403);
+    }
+
+    if (isOwner && isLeavingSelf) {
+      const { error: deleteMembersError } = await supabase
+        .from('group_members')
+        .delete()
+        .eq('group_id', groupId);
+
+      if (deleteMembersError) {
+        console.log('Delete group members error:', deleteMembersError);
+        return c.json({ error: deleteMembersError.message }, 500);
+      }
+
+      const { error: deleteGroupError } = await supabase
+        .from('groups')
+        .delete()
+        .eq('id', groupId);
+
+      if (deleteGroupError) {
+        console.log('Delete group error:', deleteGroupError);
+        return c.json({ error: deleteGroupError.message }, 500);
+      }
+
+      return c.json({ success: true, deletedGroup: true });
+    }
+
+    const { error: deleteMemberError } = await supabase
+      .from('group_members')
+      .delete()
+      .eq('group_id', groupId)
+      .eq('user_id', targetUserId);
+
+    if (deleteMemberError) {
+      console.log('Delete group member error:', deleteMemberError);
+      return c.json({ error: deleteMemberError.message }, 500);
+    }
+
+    return c.json({ success: true });
+  } catch (error) {
+    console.log('Delete group member route error:', error);
+    return c.json({ error: 'Failed to remove group member' }, 500);
+  }
+});
+
+// ===== GROUP ASSETS ROUTES =====
+
+async function ensureGroupAccess(groupId: string, userId: string) {
+  const { data: group, error: groupError } = await supabase
+    .from('groups')
+    .select('id, created_by')
+    .eq('id', groupId)
+    .maybeSingle();
+
+  if (groupError) {
+    return { error: groupError.message, group: null, hasAccess: false };
+  }
+
+  if (!group?.id) {
+    return { error: 'Group not found', group: null, hasAccess: false };
+  }
+
+  if (group.created_by === userId) {
+    return { error: null, group, hasAccess: true };
+  }
+
+  const { data: membership, error: membershipError } = await supabase
+    .from('group_members')
+    .select('group_id')
+    .eq('group_id', groupId)
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (membershipError) {
+    return { error: membershipError.message, group, hasAccess: false };
+  }
+
+  return { error: null, group, hasAccess: !!membership?.group_id };
+}
+
+app.get("/make-server-819c6d9b/groups/:groupId/assets", async (c: Context) => {
+  const { error, user } = await verifyUser(c.req.header('Authorization'));
+
+  if (error || !user) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+
+  try {
+    const groupId = c.req.param('groupId');
+    const access = await ensureGroupAccess(groupId, user.id);
+
+    if (access.error) {
+      return c.json({ error: access.error }, access.error === 'Group not found' ? 404 : 500);
+    }
+
+    if (!access.hasAccess) {
+      return c.json({ error: 'Forbidden' }, 403);
+    }
+
+    const { data: assets, error: assetsError } = await supabase
+      .from('group_assets')
+      .select('id, group_id, symbol, name, asset_type, logo, added_by, added_at')
+      .eq('group_id', groupId)
+      .order('added_at', { ascending: false });
+
+    if (assetsError) {
+      console.log('Group assets fetch error:', assetsError);
+      return c.json({ error: assetsError.message }, 500);
+    }
+
+    return c.json({ assets: assets || [] });
+  } catch (error) {
+    console.log('Group assets route error:', error);
+    return c.json({ error: 'Failed to fetch group assets' }, 500);
+  }
+});
+
+app.post("/make-server-819c6d9b/groups/:groupId/assets", async (c: Context) => {
+  const { error, user } = await verifyUser(c.req.header('Authorization'));
+
+  if (error || !user) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+
+  try {
+    const groupId = c.req.param('groupId');
+    const access = await ensureGroupAccess(groupId, user.id);
+
+    if (access.error) {
+      return c.json({ error: access.error }, access.error === 'Group not found' ? 404 : 500);
+    }
+
+    if (!access.hasAccess) {
+      return c.json({ error: 'Forbidden' }, 403);
+    }
+
+    const { symbol, name, assetType, logo } = await c.req.json();
+    const trimmedSymbol = String(symbol || '').trim();
+
+    if (!trimmedSymbol) {
+      return c.json({ error: 'Asset symbol is required' }, 400);
+    }
+
+    const { data: asset, error: assetError } = await supabase
+      .from('group_assets')
+      .upsert({
+        group_id: groupId,
+        symbol: trimmedSymbol,
+        name: name ? String(name) : null,
+        asset_type: assetType ? String(assetType) : null,
+        logo: logo ? String(logo) : null,
+        added_by: user.id,
+      }, {
+        onConflict: 'group_id,symbol',
+      })
+      .select('id, group_id, symbol, name, asset_type, logo, added_by, added_at')
+      .single();
+
+    if (assetError) {
+      console.log('Add group asset error:', assetError);
+      return c.json({ error: assetError.message }, 500);
+    }
+
+    return c.json({ asset });
+  } catch (error) {
+    console.log('Add group asset route error:', error);
+    return c.json({ error: 'Failed to add group asset' }, 500);
+  }
+});
+
+app.delete("/make-server-819c6d9b/groups/:groupId/assets/:symbol", async (c: Context) => {
+  const { error, user } = await verifyUser(c.req.header('Authorization'));
+
+  if (error || !user) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+
+  try {
+    const groupId = c.req.param('groupId');
+    const symbol = decodeURIComponent(c.req.param('symbol') || '').trim();
+    const access = await ensureGroupAccess(groupId, user.id);
+
+    if (access.error) {
+      return c.json({ error: access.error }, access.error === 'Group not found' ? 404 : 500);
+    }
+
+    if (!access.hasAccess) {
+      return c.json({ error: 'Forbidden' }, 403);
+    }
+
+    if (!symbol) {
+      return c.json({ error: 'Asset symbol is required' }, 400);
+    }
+
+    const { error: deleteAssetError } = await supabase
+      .from('group_assets')
+      .delete()
+      .eq('group_id', groupId)
+      .eq('symbol', symbol);
+
+    if (deleteAssetError) {
+      console.log('Delete group asset error:', deleteAssetError);
+      return c.json({ error: deleteAssetError.message }, 500);
+    }
+
+    return c.json({ success: true });
+  } catch (error) {
+    console.log('Delete group asset route error:', error);
+    return c.json({ error: 'Failed to remove group asset' }, 500);
+  }
+});
+
+// ===== GROUP MESSAGES ROUTES =====
+
+app.get("/make-server-819c6d9b/groups/:groupId/messages", async (c: Context) => {
+  const { error, user } = await verifyUser(c.req.header('Authorization'));
+
+  if (error || !user) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+
+  try {
+    const groupId = c.req.param('groupId');
+    const roomId = String(c.req.query('roomId') || 'general').trim() || 'general';
+    const access = await ensureGroupAccess(groupId, user.id);
+
+    if (access.error) {
+      return c.json({ error: access.error }, access.error === 'Group not found' ? 404 : 500);
+    }
+
+    if (!access.hasAccess) {
+      return c.json({ error: 'Forbidden' }, 403);
+    }
+
+    const { data: messages, error: messagesError } = await supabase
+      .from('group_messages')
+      .select('id, group_id, room_id, message, user_id, user_email, created_at')
+      .eq('group_id', groupId)
+      .eq('room_id', roomId)
+      .order('created_at', { ascending: true })
+      .limit(100);
+
+    if (messagesError) {
+      console.log('Group messages fetch error:', messagesError);
+      return c.json({ error: messagesError.message }, 500);
+    }
+
+    return c.json({ messages: messages || [] });
+  } catch (error) {
+    console.log('Group messages route error:', error);
+    return c.json({ error: 'Failed to fetch group messages' }, 500);
+  }
+});
+
+app.post("/make-server-819c6d9b/groups/:groupId/messages", async (c: Context) => {
+  const { error, user } = await verifyUser(c.req.header('Authorization'));
+
+  if (error || !user) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+
+  try {
+    const groupId = c.req.param('groupId');
+    const access = await ensureGroupAccess(groupId, user.id);
+
+    if (access.error) {
+      return c.json({ error: access.error }, access.error === 'Group not found' ? 404 : 500);
+    }
+
+    if (!access.hasAccess) {
+      return c.json({ error: 'Forbidden' }, 403);
+    }
+
+    const { roomId, message } = await c.req.json();
+    const safeRoomId = String(roomId || 'general').trim() || 'general';
+    const safeMessage = String(message || '').trim();
+
+    if (!safeMessage) {
+      return c.json({ error: 'Message is required' }, 400);
+    }
+
+    if (safeMessage.length > 1000) {
+      return c.json({ error: 'Message is too long' }, 400);
+    }
+
+    const { data: insertedMessage, error: insertError } = await supabase
+      .from('group_messages')
+      .insert({
+        group_id: groupId,
+        room_id: safeRoomId,
+        message: safeMessage,
+        user_id: user.id,
+        user_email: user.email || null,
+      })
+      .select('id, group_id, room_id, message, user_id, user_email, created_at')
+      .single();
+
+    if (insertError) {
+      console.log('Send group message error:', insertError);
+      return c.json({ error: insertError.message }, 500);
+    }
+
+    return c.json({ message: insertedMessage });
+  } catch (error) {
+    console.log('Send group message route error:', error);
+    return c.json({ error: 'Failed to send group message' }, 500);
+  }
+});
+
+
+// ===== ORGANIZATIONS ROUTES =====
+
+function getMaxUsersForPlan(plan: string) {
+  if (plan === 'trader') return 1;
+  if (plan === 'fund') return 20;
+  return 999999;
+}
+
+async function buildOrganizationDashboard(organizationId: string) {
+  const { data: organization, error: organizationError } = await supabase
+    .from('organizations')
+    .select('id, name, subscription_plan, max_users, subscription_active, stripe_customer_id, stripe_subscription_id, created_at')
+    .eq('id', organizationId)
+    .maybeSingle();
+
+  if (organizationError) {
+    throw new Error(organizationError.message);
+  }
+
+  if (!organization?.id) {
+    throw new Error('Organization not found');
+  }
+
+  const { data: members, error: membersError } = await supabase
+    .from('organization_members')
+    .select('id, organization_id, user_id, email, role, created_at')
+    .eq('organization_id', organizationId)
+    .order('created_at', { ascending: true });
+
+  if (membersError) {
+    throw new Error(membersError.message);
+  }
+
+  const safeMembers = members || [];
+
+  return {
+    organization,
+    members: safeMembers,
+    used_users: safeMembers.length,
+    max_users: organization.max_users || getMaxUsersForPlan(organization.subscription_plan),
+  };
+}
+
+app.post("/make-server-819c6d9b/organizations/login", async (c: Context) => {
+  try {
+    const { name, password } = await c.req.json();
+    const organizationName = String(name || '').trim();
+    const organizationPassword = String(password || '').trim();
+
+    if (!organizationName || !organizationPassword) {
+      return c.json({ error: 'Organization name and password are required' }, 400);
+    }
+
+    const { data: organization, error: organizationError } = await supabase
+      .from('organizations')
+      .select('id, subscription_active')
+      .eq('name', organizationName)
+      .eq('password', organizationPassword)
+      .maybeSingle();
+
+    if (organizationError) {
+      console.log('Enterprise login error:', organizationError);
+      return c.json({ error: organizationError.message }, 500);
+    }
+
+    if (!organization?.id) {
+      return c.json({ error: 'Invalid organization credentials' }, 401);
+    }
+
+    if (!organization.subscription_active) {
+      return c.json({ error: 'Organization subscription inactive' }, 403);
+    }
+
+    const dashboard = await buildOrganizationDashboard(organization.id);
+    return c.json(dashboard);
+  } catch (error) {
+    console.log('Enterprise login route error:', error);
+    return c.json({ error: 'Failed to login organization' }, 500);
+  }
+});
+
+app.get("/make-server-819c6d9b/organizations/:organizationId", async (c: Context) => {
+  const { error, user } = await verifyUser(c.req.header('Authorization'));
+
+  if (error || !user) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+
+  try {
+    const organizationId = c.req.param('organizationId');
+
+    const { data: membership, error: membershipError } = await supabase
+      .from('organization_members')
+      .select('id')
+      .eq('organization_id', organizationId)
+      .eq('email', String(user.email || '').toLowerCase())
+      .maybeSingle();
+
+    if (membershipError) {
+      console.log('Organization dashboard membership error:', membershipError);
+      return c.json({ error: membershipError.message }, 500);
+    }
+
+    if (!membership?.id) {
+      return c.json({ error: 'Forbidden' }, 403);
+    }
+
+    const dashboard = await buildOrganizationDashboard(organizationId);
+    return c.json(dashboard);
+  } catch (error) {
+    console.log('Organization dashboard route error:', error);
+    return c.json({ error: 'Failed to fetch organization dashboard' }, 500);
+  }
+});
+
+app.post("/make-server-819c6d9b/organizations/:organizationId/members", async (c: Context) => {
+  try {
+    const organizationId = c.req.param('organizationId');
+    const { email, role } = await c.req.json();
+    const safeEmail = String(email || '').trim().toLowerCase();
+    const safeRole = role === 'admin' ? 'admin' : 'member';
+
+    if (!safeEmail) {
+      return c.json({ error: 'Email is required' }, 400);
+    }
+
+    const dashboard = await buildOrganizationDashboard(organizationId);
+    const maxUsers = dashboard.max_users || getMaxUsersForPlan(dashboard.organization.subscription_plan);
+
+    const alreadyExists = dashboard.members.some((member: any) => member.email === safeEmail);
+
+    if (!alreadyExists && dashboard.used_users >= maxUsers) {
+      return c.json({ error: 'Organization user limit reached' }, 400);
+    }
+
+    const { data: member, error: memberError } = await supabase
+      .from('organization_members')
+      .upsert({
+        organization_id: organizationId,
+        email: safeEmail,
+        role: safeRole,
+      }, {
+        onConflict: 'organization_id,email',
+      })
+      .select('id, organization_id, user_id, email, role, created_at')
+      .single();
+
+    if (memberError) {
+      console.log('Add organization member error:', memberError);
+      return c.json({ error: memberError.message }, 500);
+    }
+
+    return c.json({ member });
+  } catch (error) {
+    console.log('Add organization member route error:', error);
+    return c.json({ error: 'Failed to add organization member' }, 500);
+  }
+});
+
+app.delete("/make-server-819c6d9b/organizations/:organizationId/members/:memberId", async (c: Context) => {
+  try {
+    const organizationId = c.req.param('organizationId');
+    const memberId = c.req.param('memberId');
+
+    const { data: member, error: memberCheckError } = await supabase
+      .from('organization_members')
+      .select('id, role')
+      .eq('id', memberId)
+      .eq('organization_id', organizationId)
+      .maybeSingle();
+
+    if (memberCheckError) {
+      console.log('Find organization member error:', memberCheckError);
+      return c.json({ error: memberCheckError.message }, 500);
+    }
+
+    if (!member?.id) {
+      return c.json({ error: 'Member not found' }, 404);
+    }
+
+    if (member.role === 'owner') {
+      return c.json({ error: 'Organization owner cannot be removed' }, 400);
+    }
+
+    const { error: deleteError } = await supabase
+      .from('organization_members')
+      .delete()
+      .eq('id', memberId)
+      .eq('organization_id', organizationId);
+
+    if (deleteError) {
+      console.log('Delete organization member error:', deleteError);
+      return c.json({ error: deleteError.message }, 500);
+    }
+
+    return c.json({ success: true });
+  } catch (error) {
+    console.log('Delete organization member route error:', error);
+    return c.json({ error: 'Failed to remove organization member' }, 500);
+  }
+});
+
 Deno.serve(app.fetch);

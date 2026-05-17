@@ -1,4 +1,4 @@
-import { useParams, useNavigate, Link } from "react-router-dom";
+import { useParams, useNavigate, Link, useLocation } from "react-router-dom";
 import { ArrowLeft, ExternalLink, HelpCircle, Star, X, Share } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "motion/react";
@@ -7,7 +7,7 @@ import { CbprMethode } from "../components/CbprMethode";
 import { AssetIcon } from "../components/AssetIcon";
 import { useFavorites } from "../contexts/FavoritesContext";
 import { useAuth } from "../contexts/AuthContext";
-import { apiService } from "../services/api";
+import { apiService, type DeskGroup, type GroupAsset } from "../services/api";
 import { type AssetType } from "../data/mockAssets";
 import { useWebHaptics } from "web-haptics/react";
 import logoEtoro from "../assets/logo_etoro.png";
@@ -31,6 +31,15 @@ import {
 } from "recharts";
 
 
+type AnalysisModel = "cbpr" | "volatility_breakout" | "mean_reversion";
+
+function normalizeAnalysisModel(model?: string | null): AnalysisModel {
+  if (model === "volatility_breakout" || model === "mean_reversion") {
+    return model;
+  }
+  return "cbpr";
+}
+
 type AssetDetailData = {
   id: string;
   symbol: string;
@@ -45,14 +54,34 @@ type AssetDetailData = {
   status: "opportunity" | "risk" | "neutral";
   signal: string;
   score: number;
+  model: AnalysisModel;
   chartData: Array<{
     date: string;
+    open?: number | null;
+    high?: number | null;
+    low?: number | null;
     price: number;
     zone: "opportunity" | "risk" | "neutral";
     sma200: number;
     sma200Upper: number;
     sma200Lower: number;
     pivotLine: number | null;
+    pivotSupport?: number | null;
+    pivotResistance?: number | null;
+    ema20?: number | null;
+    ema50?: number | null;
+    atr14?: number | null;
+    volatilityRatio?: number | null;
+    rangeHigh?: number | null;
+    rangeLow?: number | null;
+    breakoutDirection?: string;
+    trendConfirmation?: string;
+    mean?: number | null;
+    meanUpper?: number | null;
+    meanLower?: number | null;
+    distancePct?: number | null;
+    rsi14?: number | null;
+    signal?: string;
   }>;
   smaChannel: {
     sma200: number | null;
@@ -63,15 +92,7 @@ type AssetDetailData = {
     label: string;
     color: string;
   }>;
-  technicalIndicators: {
-    channelDirection: string;
-    bollingerBands: string;
-    pivot: string;
-    sma200: string;
-    timeInBuyZone: string;
-    rsi: string;
-    macd: string;
-  };
+  technicalIndicators: Record<string, string>;
   description: string;
   news: Array<{
     id: string;
@@ -86,7 +107,6 @@ type AssetDetailData = {
 };
 
 
-type UserPlan = "free" | "pro" | "quant";
 
 type MacroRegionStatus = "favorable" | "neutral" | "risk";
 
@@ -160,63 +180,7 @@ function setCachedHomeAsset(
   } catch { }
 }
 
-const FREE_STOCK_SYMBOLS = new Set([
-  "AAPL", "MSFT", "AMZN", "GOOGL", "META", "NVDA", "TSLA", "JPM", "JNJ", "V",
-  "WMT", "PG", "XOM", "UNH", "KO", "DIS", "NFLX", "INTC", "AMD", "CSCO",
-  "ORCL", "IBM", "BA", "NKE", "PFE", "MRK", "CVX", "MCD", "COST", "PEP",
-  "ABT", "AVGO", "TMO", "ACN", "QCOM", "TXN", "HON", "LIN", "UPS", "PM",
-  "RTX", "LOW", "INTU", "AMGN", "SPGI", "CAT", "GS", "DE", "BLK", "MDT",
-  "ISRG", "NOW", "BKNG", "ADBE", "PLD", "SYK", "GILD", "ADI", "VRTX", "ZTS",
-  "CB", "CI", "MO", "LMT", "SCHW", "DUK", "MMC", "SO", "USB", "BDX",
-  "FIS", "PNC", "T", "APD", "CSX", "NSC", "ICE", "GM", "F", "ETN",
-  "EMR", "EOG", "MPC", "PSX", "KMI", "SLB", "COP", "HAL", "DVN", "OXY",
-  "AIG", "MET", "PRU", "ALL", "TRV", "AXP", "COF", "DFS", "PYPL", "SQ",
-  "CRM", "SNOW", "SHOP", "UBER", "LYFT", "TWLO", "DDOG", "NET", "OKTA", "ZS",
-  "CRWD", "PANW", "FTNT", "TEAM", "WDAY", "DOCU", "ROKU", "TTD", "SPOT", "EA",
-  "ATVI", "TTWO", "RBLX", "U", "PLTR", "AI", "SMCI", "MRVL", "KLAC", "LRCX",
-  "ASML", "NXPI", "ON", "MPWR", "SWKS", "QRVO", "CDNS", "SNPS", "ANSS", "PAYC",
-  "PAYX", "ADP", "HPQ", "DELL", "HPE", "SONY", "NTDOY", "BABA", "JD",
-  "PDD", "TCEHY", "BIDU", "SE", "MELI", "TSM", "INFY", "SAP", "ORAN", "VOD"
-]);
 
-function normalizeAccessSymbol(symbol?: string) {
-  return String(symbol || "").trim().toUpperCase();
-}
-
-function getRequiredPlanForAsset(asset: { symbol: string; assetType: AssetType }): UserPlan {
-  const symbol = normalizeAccessSymbol(asset.symbol);
-
-  if (asset.assetType === "crypto" || asset.assetType === "forex") {
-    return "quant";
-  }
-
-  if (asset.assetType === "etf") {
-    return "pro";
-  }
-
-  if (asset.assetType === "stock") {
-    return FREE_STOCK_SYMBOLS.has(symbol) ? "free" : "pro";
-  }
-
-  return "quant";
-}
-
-function isAssetAllowedForPlan(
-  asset: { symbol: string; assetType: AssetType },
-  plan: UserPlan,
-): boolean {
-  const requiredPlan = getRequiredPlanForAsset(asset);
-
-  if (plan === "quant") return true;
-  if (plan === "pro") return requiredPlan !== "quant";
-  return requiredPlan === "free";
-}
-
-function getPlanLabel(plan: UserPlan): string {
-  if (plan === "quant") return "Quant";
-  if (plan === "pro") return "Pro";
-  return "Free";
-}
 
 function normalizeAssetType(rawType?: string, name?: string, exchange?: string): AssetType {
   const type = (rawType || "").toLowerCase();
@@ -478,6 +442,102 @@ const TECHNICAL_INDICATOR_HELP: Record<
     courbe:
       "",
   },
+  "EMA20": {
+    title: "EMA20",
+    description:
+      "L'EMA20 est une moyenne mobile courte. Elle permet de lire la dynamique récente du prix.",
+    insight:
+      "Dans le modèle de rupture, elle sert à vérifier si la tendance courte accompagne la cassure.",
+    courbe: "Courbe : moyenne courte dynamique",
+  },
+  "EMA50": {
+    title: "EMA50",
+    description:
+      "L'EMA50 est une moyenne mobile intermédiaire. Elle sert de repère pour la tendance de fond courte à moyenne.",
+    insight:
+      "Lorsque l'EMA20 passe au-dessus de l'EMA50, le modèle lit une confirmation haussière. L'inverse indique une confirmation baissière.",
+    courbe: "Courbe : moyenne intermédiaire",
+  },
+  "ATR14": {
+    title: "ATR14",
+    description:
+      "L'ATR mesure l'amplitude moyenne récente du prix. Il sert à lire l'expansion ou la contraction de la volatilité.",
+    insight:
+      "Dans le modèle de rupture, une volatilité qui augmente renforce la qualité d'une cassure.",
+    courbe: "Indicateur : volatilité récente",
+  },
+  "Ratio volatilité": {
+    title: "Ratio volatilité",
+    description:
+      "Le ratio compare la volatilité actuelle à sa moyenne récente.",
+    insight:
+      "Un ratio supérieur à 1 indique que la volatilité actuelle est plus élevée que sa moyenne récente.",
+    courbe: "Indicateur : ATR actuel / ATR moyen",
+  },
+  "Range haut": {
+    title: "Range haut",
+    description:
+      "Le range haut correspond au plus haut récent utilisé comme seuil de cassure.",
+    insight:
+      "Un prix qui passe au-dessus de cette zone peut signaler une rupture haussière.",
+    courbe: "Ligne : résistance de range",
+  },
+  "Range bas": {
+    title: "Range bas",
+    description:
+      "Le range bas correspond au plus bas récent utilisé comme seuil de cassure.",
+    insight:
+      "Un prix qui passe sous cette zone peut signaler une rupture baissière.",
+    courbe: "Ligne : support de range",
+  },
+  "Cassure": {
+    title: "Cassure",
+    description:
+      "La cassure indique si le prix sort du range récent par le haut, par le bas ou reste neutre.",
+    insight:
+      "Elle permet de savoir si le marché tente réellement de démarrer un mouvement directionnel.",
+    courbe: "Signal : haussier, baissier ou neutre",
+  },
+  "Confirmation tendance": {
+    title: "Confirmation tendance",
+    description:
+      "La confirmation de tendance compare l'orientation des moyennes courtes.",
+    insight:
+      "Une cassure est plus solide lorsque la tendance courte va dans le même sens.",
+    courbe: "Signal : cohérence de tendance",
+  },
+  "Moyenne long terme": {
+    title: "Moyenne long terme",
+    description:
+      "La moyenne long terme représente le point d'équilibre utilisé par le modèle de retour à la moyenne.",
+    insight:
+      "Plus le prix s'éloigne de cette moyenne, plus le modèle considère que le marché est en extension.",
+    courbe: "Courbe : moyenne long terme",
+  },
+  "Borne haute": {
+    title: "Borne haute",
+    description:
+      "La borne haute correspond à la limite supérieure autour de la moyenne long terme.",
+    insight:
+      "Lorsque le prix dépasse cette borne, le modèle considère que le marché peut devenir excessif à la hausse.",
+    courbe: "Courbe : zone haute",
+  },
+  "Borne basse": {
+    title: "Borne basse",
+    description:
+      "La borne basse correspond à la limite inférieure autour de la moyenne long terme.",
+    insight:
+      "Lorsque le prix passe sous cette borne, le modèle considère que le marché peut devenir excessif à la baisse.",
+    courbe: "Courbe : zone basse",
+  },
+  "Écart à la moyenne": {
+    title: "Écart à la moyenne",
+    description:
+      "Cet indicateur mesure la distance entre le prix actuel et sa moyenne long terme.",
+    insight:
+      "Il permet de lire directement si le prix est proche de son équilibre ou fortement étiré.",
+    courbe: "Indicateur : distance en pourcentage",
+  },
   "Prix moyen": {
     title: "Prix moyen",
     description:
@@ -692,7 +752,11 @@ function mapToAssetDetail(analysisResponse: any, symbol: string): AssetDetailDat
       quote?.exchange,
     );
 
-  const values = Array.isArray(analysisResponse?.values) ? analysisResponse.values : [];
+  const values = Array.isArray(analysis?.chart)
+    ? analysis.chart
+    : Array.isArray(analysisResponse?.values)
+      ? analysisResponse.values
+      : [];
 
   // Define these before any use of currentPrice in pivot calculations
   const currentPrice = Number(quote?.price || indicators?.currentPrice || 0);
@@ -723,16 +787,60 @@ function mapToAssetDetail(analysisResponse: any, symbol: string): AssetDetailDat
     pivotLineValue = null;
   }
 
+  const model = normalizeAnalysisModel(analysisResponse?.model || analysis?.model);
+  const signalByTime = new Map<string, string>();
+  if (Array.isArray(analysis?.signals)) {
+    analysis.signals.forEach((item: any) => {
+      if (item?.time && item?.signal) {
+        signalByTime.set(String(item.time), String(item.signal));
+      }
+    });
+  }
+
   const chartData = values
     .slice()
     .map((point: any) => ({
       date: String(point?.datetime || ""),
+      open: Number.isFinite(Number(point?.open)) ? Number(point?.open) : null,
+      high: Number.isFinite(Number(point?.high)) ? Number(point?.high) : null,
+      low: Number.isFinite(Number(point?.low)) ? Number(point?.low) : null,
       price: Number(point?.close || 0),
       zone: status,
-      sma200: Number(point?.SMA200 ?? NaN),
-      sma200Upper: Number(point?.SMA200_upper ?? NaN),
-      sma200Lower: Number(point?.SMA200_lower ?? NaN),
-      pivotLine: Number.isFinite(pivotLineValue) ? (pivotLineValue as number) : null,
+      sma200: Number(point?.SMA200 ?? point?.sma200 ?? point?.mean ?? point?.ema50 ?? NaN),
+      sma200Upper: Number(point?.SMA200_upper ?? point?.sma200Upper ?? point?.meanUpper ?? point?.rangeHigh ?? NaN),
+      sma200Lower: Number(point?.SMA200_lower ?? point?.sma200Lower ?? point?.meanLower ?? point?.rangeLow ?? NaN),
+      pivotSupport: Number.isFinite(Number(point?.pivotSupport)) ? Number(point?.pivotSupport) : null,
+      pivotResistance: Number.isFinite(Number(point?.pivotResistance)) ? Number(point?.pivotResistance) : null,
+      pivotLine:
+        Number.isFinite(Number(point?.pivotSupport)) && Number.isFinite(Number(point?.pivotResistance))
+          ? Math.abs(Number(point?.pivotSupport) - Number(point?.close || 0)) <= Math.abs(Number(point?.pivotResistance) - Number(point?.close || 0))
+            ? Number(point?.pivotSupport)
+            : Number(point?.pivotResistance)
+          : Number.isFinite(Number(point?.pivotSupport))
+            ? Number(point?.pivotSupport)
+            : Number.isFinite(Number(point?.pivotResistance))
+              ? Number(point?.pivotResistance)
+              : Number.isFinite(pivotLineValue)
+                ? (pivotLineValue as number)
+                : Number.isFinite(Number(point?.ema20))
+                  ? Number(point?.ema20)
+                  : null,
+      ema20: Number.isFinite(Number(point?.ema20)) ? Number(point?.ema20) : null,
+      ema50: Number.isFinite(Number(point?.ema50)) ? Number(point?.ema50) : null,
+      atr14: Number.isFinite(Number(point?.atr14)) ? Number(point?.atr14) : null,
+      volatilityRatio: Number.isFinite(Number(point?.volatilityRatio))
+        ? Number(point?.volatilityRatio)
+        : null,
+      rangeHigh: Number.isFinite(Number(point?.rangeHigh)) ? Number(point?.rangeHigh) : null,
+      rangeLow: Number.isFinite(Number(point?.rangeLow)) ? Number(point?.rangeLow) : null,
+      breakoutDirection: String(point?.breakoutDirection || "neutre"),
+      trendConfirmation: String(point?.trendConfirmation || "neutre"),
+      mean: Number.isFinite(Number(point?.mean)) ? Number(point?.mean) : null,
+      meanUpper: Number.isFinite(Number(point?.meanUpper)) ? Number(point?.meanUpper) : null,
+      meanLower: Number.isFinite(Number(point?.meanLower)) ? Number(point?.meanLower) : null,
+      distancePct: Number.isFinite(Number(point?.distancePct)) ? Number(point?.distancePct) : null,
+      rsi14: Number.isFinite(Number(point?.rsi14)) ? Number(point?.rsi14) : null,
+      signal: signalByTime.get(String(point?.datetime || "")) || "NEUTRE",
     }))
     .filter((point: { price: number }) => Number.isFinite(point.price));
 
@@ -755,30 +863,68 @@ function mapToAssetDetail(analysisResponse: any, symbol: string): AssetDetailDat
     currency,
   );
 
-  return {
-    id: symbol,
-    symbol,
-    name,
-    assetType,
-    currentPrice,
-    change,
-    changePercent,
-    logo: String(analysisResponse?.logo || ""),
-    exchange,
-    currency,
-    status,
-    signal,
-    score,
-    chartData,
+  let technicalIndicators: Record<string, string>;
 
-    // 🆕 Tendance SMA200 (contexte CBPR)
-    smaChannel: {
-      sma200: Number.isFinite(sma200) ? sma200 : null,
-      upper: Number.isFinite(sma200) ? sma200 * (1 + getSmaChannelMargin(assetType)) : null,
-      lower: Number.isFinite(sma200) ? sma200 * (1 - getSmaChannelMargin(assetType)) : null,
-    },
-    legend: [],
-    technicalIndicators: {
+  if (model === "volatility_breakout") {
+    const ema20 = Number(indicators?.ema20);
+    const ema50 = Number(indicators?.ema50);
+    const atr14 = Number(indicators?.atr14);
+    const volatilityRatio = Number(indicators?.volatilityRatio);
+    const rangeHigh = Number(indicators?.rangeHigh);
+    const rangeLow = Number(indicators?.rangeLow);
+    const breakoutDirection = String(indicators?.breakoutDirection || "neutre");
+    const trendConfirmation = String(indicators?.trendConfirmation || "neutre");
+
+    technicalIndicators = {
+      "Cassure": breakoutDirection,
+      "Confirmation tendance": trendConfirmation,
+      "Ratio volatilité": Number.isFinite(volatilityRatio)
+        ? `${volatilityRatio.toFixed(2)}`
+        : "Indisponible",
+      "ATR14": Number.isFinite(atr14)
+        ? formatCurrency(atr14, currency)
+        : "Indisponible",
+      "Range haut": Number.isFinite(rangeHigh)
+        ? formatCurrency(rangeHigh, currency)
+        : "Indisponible",
+      "Range bas": Number.isFinite(rangeLow)
+        ? formatCurrency(rangeLow, currency)
+        : "Indisponible",
+      "EMA20": Number.isFinite(ema20)
+        ? formatCurrency(ema20, currency)
+        : "Indisponible",
+      "EMA50": Number.isFinite(ema50)
+        ? formatCurrency(ema50, currency)
+        : "Indisponible",
+      "RSI": Number.isFinite(rsi14)
+        ? `${rsi14.toFixed(1)}`
+        : "Indisponible",
+    };
+  } else if (model === "mean_reversion") {
+    const mean = Number(indicators?.mean);
+    const meanUpper = Number(indicators?.meanUpper);
+    const meanLower = Number(indicators?.meanLower);
+    const distancePct = Number(indicators?.distancePct);
+
+    technicalIndicators = {
+      "Moyenne long terme": Number.isFinite(mean)
+        ? formatCurrency(mean, currency)
+        : "Indisponible",
+      "Borne haute": Number.isFinite(meanUpper)
+        ? formatCurrency(meanUpper, currency)
+        : "Indisponible",
+      "Borne basse": Number.isFinite(meanLower)
+        ? formatCurrency(meanLower, currency)
+        : "Indisponible",
+      "Écart à la moyenne": Number.isFinite(distancePct)
+        ? `${distancePct.toFixed(2)}%`
+        : "Indisponible",
+      "RSI": Number.isFinite(rsi14)
+        ? `${rsi14.toFixed(1)}`
+        : "Indisponible",
+    };
+  } else {
+    technicalIndicators = {
       channelDirection:
         channelDirection === "haussier"
           ? "Haussier"
@@ -811,7 +957,34 @@ function mapToAssetDetail(analysisResponse: any, symbol: string): AssetDetailDat
         Number.isFinite(macd) && Number.isFinite(macdSignal)
           ? `${macd.toFixed(4)} / ${macdSignal.toFixed(4)}`
           : signal,
+    };
+  }
+
+  return {
+    id: symbol,
+    symbol,
+    name,
+    assetType,
+    currentPrice,
+    change,
+    changePercent,
+    logo: String(analysisResponse?.logo || ""),
+    exchange,
+    currency,
+    status,
+    signal,
+    score,
+    model,
+    chartData,
+
+    // 🆕 Tendance SMA200 (contexte CBPR)
+    smaChannel: {
+      sma200: Number.isFinite(sma200) ? sma200 : null,
+      upper: Number.isFinite(sma200) ? sma200 * (1 + getSmaChannelMargin(assetType)) : null,
+      lower: Number.isFinite(sma200) ? sma200 * (1 - getSmaChannelMargin(assetType)) : null,
     },
+    legend: [],
+    technicalIndicators,
 
     description: buildDescription(name, symbol, assetType, exchange),
     news: buildNewsPlaceholders(symbol, signal, score),
@@ -832,6 +1005,8 @@ function mapToAssetDetail(analysisResponse: any, symbol: string): AssetDetailDat
 export function AssetDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
+  const selectedModel = normalizeAnalysisModel(new URLSearchParams(location.search).get("model"));
   const symbol = decodeURIComponent(id || "");
   const { isFavorite, addFavorite, removeFavorite, favorites } = useFavorites() as {
     isFavorite: (assetId: string) => boolean;
@@ -853,7 +1028,14 @@ export function AssetDetail() {
   const [openIndicatorHelp, setOpenIndicatorHelp] = useState<string | null>(null);
   const [openCbprMethod, setOpenCbprMethod] = useState(false);
   const [macroRegions, setMacroRegions] = useState<MacroRegion[]>(DEFAULT_MACRO_REGIONS);
-  const currentPlan: UserPlan = user?.subscription || "free";
+  const [userGroups, setUserGroups] = useState<DeskGroup[]>([]);
+  const [selectedGroupId, setSelectedGroupId] = useState("");
+  const [selectedGroupAssets, setSelectedGroupAssets] = useState<GroupAsset[]>([]);
+  const [isGroupsLoading, setIsGroupsLoading] = useState(false);
+  const [isGroupAssetsLoading, setIsGroupAssetsLoading] = useState(false);
+  const [isAddingToGroup, setIsAddingToGroup] = useState(false);
+  const [groupAssetMessage, setGroupAssetMessage] = useState("");
+  const [groupAssetError, setGroupAssetError] = useState("");
 
   useEffect(() => {
     window.scrollTo({
@@ -886,6 +1068,129 @@ export function AssetDetail() {
       isCancelled = true;
     };
   }, []);
+
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    const loadGroups = async () => {
+      setIsGroupsLoading(true);
+      setGroupAssetError("");
+
+      try {
+        const groups = await apiService.getGroups();
+
+        if (isCancelled) return;
+
+        setUserGroups(groups);
+        setSelectedGroupId((previousGroupId) => {
+          if (groups.some((group) => group.id === previousGroupId)) {
+            return previousGroupId;
+          }
+
+          return groups[0]?.id || "";
+        });
+      } catch (error) {
+        console.error("Error loading groups on asset detail:", error);
+        if (!isCancelled) {
+          setUserGroups([]);
+          setSelectedGroupId("");
+          setGroupAssetError("Impossible de charger vos groupes pour le moment.");
+        }
+      } finally {
+        if (!isCancelled) {
+          setIsGroupsLoading(false);
+        }
+      }
+    };
+
+    loadGroups();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [user?.email]);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    const loadSelectedGroupAssets = async () => {
+      if (!selectedGroupId) {
+        setSelectedGroupAssets([]);
+        return;
+      }
+
+      setIsGroupAssetsLoading(true);
+
+      try {
+        const assets = await apiService.getGroupAssets(selectedGroupId);
+
+        if (!isCancelled) {
+          setSelectedGroupAssets(assets);
+        }
+      } catch (error) {
+        console.error("Error loading selected group assets:", error);
+        if (!isCancelled) {
+          setSelectedGroupAssets([]);
+          setGroupAssetError("Impossible de vérifier le portefeuille du groupe.");
+        }
+      } finally {
+        if (!isCancelled) {
+          setIsGroupAssetsLoading(false);
+        }
+      }
+    };
+
+    loadSelectedGroupAssets();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [selectedGroupId]);
+
+  const selectedGroup = userGroups.find((group) => group.id === selectedGroupId);
+  const isAssetInSelectedGroup = asset
+    ? selectedGroupAssets.some(
+      (groupAsset) => groupAsset.symbol.toUpperCase() === asset.symbol.toUpperCase(),
+    )
+    : false;
+
+  const addAssetToSelectedGroup = async () => {
+    if (!asset || !selectedGroupId || isAddingToGroup) return;
+
+    setGroupAssetMessage("");
+    setGroupAssetError("");
+    setIsAddingToGroup(true);
+
+    try {
+      const addedAsset = await apiService.addGroupAsset(selectedGroupId, {
+        symbol: asset.symbol,
+        name: asset.name,
+        assetType: asset.assetType,
+        logo: asset.logo || "",
+      });
+
+      setSelectedGroupAssets((previousAssets) => {
+        const withoutDuplicate = previousAssets.filter(
+          (groupAsset) => groupAsset.symbol.toUpperCase() !== addedAsset.symbol.toUpperCase(),
+        );
+
+        return [addedAsset, ...withoutDuplicate];
+      });
+
+      setGroupAssetMessage(
+        selectedGroup?.name
+          ? `${asset.symbol} ajouté au portefeuille ${selectedGroup.name}.`
+          : `${asset.symbol} ajouté au portefeuille du groupe.`,
+      );
+    } catch (error) {
+      console.error("Error adding asset to group:", error);
+      setGroupAssetError("Impossible d'ajouter cet actif au portefeuille du groupe.");
+    } finally {
+      setIsAddingToGroup(false);
+    }
+  };
+
 
 
   useEffect(() => {
@@ -926,37 +1231,9 @@ export function AssetDetail() {
       setErrorMessage("");
 
       try {
-        const analysisResponse = await apiService.getAnalysis(symbol);
+        const analysisResponse = await apiService.getAnalysis(symbol, "4h", 300, selectedModel);
 
         const mapped = mapToAssetDetail(analysisResponse, symbol);
-        const backendRequiredPlan = String(analysisResponse?.subscription || "")
-          .trim()
-          .toLowerCase();
-
-        const requiredPlan: UserPlan =
-          backendRequiredPlan === "free" ||
-            backendRequiredPlan === "pro" ||
-            backendRequiredPlan === "quant"
-            ? (backendRequiredPlan as UserPlan)
-            : getRequiredPlanForAsset({
-              symbol: mapped.symbol,
-              assetType: mapped.assetType,
-            });
-
-        const isAllowed =
-          currentPlan === "quant"
-            ? true
-            : currentPlan === "pro"
-              ? requiredPlan !== "quant"
-              : requiredPlan === "free";
-
-        if (!isAllowed) {
-          if (!isCancelled) {
-            setAsset(null);
-            setErrorMessage(`Cet actif est réservé au plan ${getPlanLabel(requiredPlan)}.`);
-          }
-          return;
-        }
 
         if (!isCancelled) {
           setAsset(mapped);
@@ -980,7 +1257,7 @@ export function AssetDetail() {
     return () => {
       isCancelled = true;
     };
-  }, [symbol, currentPlan]);
+  }, [symbol, selectedModel]);
 
   useEffect(() => {
     return () => {
@@ -994,15 +1271,6 @@ export function AssetDetail() {
     if (!asset) return;
 
     triggerFavoriteTap();
-
-    const isAllowed = isAssetAllowedForPlan(
-      { symbol: asset.symbol, assetType: asset.assetType },
-      currentPlan,
-    );
-
-    if (!isAllowed) {
-      return;
-    }
 
     const currentValue =
       optimisticFavorite !== null ? optimisticFavorite : isFavorite(asset.id);
@@ -1077,6 +1345,111 @@ export function AssetDetail() {
     }));
   }, [asset]);
 
+  const temporalAnalysisTable = useMemo(() => {
+    if (!asset) {
+      return { columns: [] as string[], rows: [] as Array<Record<string, string | boolean>> };
+    }
+
+    const formatCompactPrice = (value?: number | null) =>
+      Number.isFinite(value as number) ? formatCurrency(value as number, asset.currency) : "—";
+
+    const formatCompactNumber = (value?: number | null, digits = 2) =>
+      Number.isFinite(value as number) ? String((value as number).toFixed(digits)) : "—";
+
+    const formatDate = (value: string) => {
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return "—";
+      return date.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" });
+    };
+
+    const latestPoints = asset.chartData.slice(-10).reverse();
+
+    if (asset.model === "volatility_breakout") {
+      return {
+        columns: ["Date", "open", "high", "low", "close", "ema20", "ema50", "atr14", "volatilityRatio", "rangeHigh", "rangeLow", "breakoutDirection", "trendConfirmation", "rsi14", "signal"],
+        rows: latestPoints.map((point) => {
+          const volatilityOk = Number.isFinite(point.volatilityRatio as number) && Number(point.volatilityRatio) >= 1.10;
+          const rowSignal =
+            point.breakoutDirection === "haussier" && point.trendConfirmation === "haussier" && volatilityOk
+              ? "OPPORTUNITÉ"
+              : point.breakoutDirection === "baissier" && point.trendConfirmation === "baissier" && volatilityOk
+                ? "RISQUE"
+                : "NEUTRE";
+          return {
+            Date: formatDate(point.date),
+            open: formatCompactPrice(point.open),
+            high: formatCompactPrice(point.high),
+            low: formatCompactPrice(point.low),
+            close: formatCompactPrice(point.price),
+            ema20: formatCompactPrice(point.ema20),
+            ema50: formatCompactPrice(point.ema50),
+            atr14: formatCompactPrice(point.atr14),
+            volatilityRatio: formatCompactNumber(point.volatilityRatio, 2),
+            rangeHigh: formatCompactPrice(point.rangeHigh),
+            rangeLow: formatCompactPrice(point.rangeLow),
+            breakoutDirection: point.breakoutDirection || "neutre",
+            trendConfirmation: point.trendConfirmation || "neutre",
+            rsi14: formatCompactNumber(point.rsi14, 1),
+            signal: rowSignal,
+          };
+        }),
+      };
+    }
+
+    if (asset.model === "mean_reversion") {
+      return {
+        columns: ["Date", "open", "high", "low", "close", "mean", "meanUpper", "meanLower", "distancePct", "rsi14", "signal"],
+        rows: latestPoints.map((point) => {
+          const close = Number(point.price);
+          const meanUpper = Number(point.meanUpper);
+          const meanLower = Number(point.meanLower);
+          const rowSignal =
+            Number.isFinite(close) && Number.isFinite(meanLower) && close < meanLower
+              ? "OPPORTUNITÉ"
+              : Number.isFinite(close) && Number.isFinite(meanUpper) && close > meanUpper
+                ? "RISQUE"
+                : "NEUTRE";
+          return {
+            Date: formatDate(point.date),
+            open: formatCompactPrice(point.open),
+            high: formatCompactPrice(point.high),
+            low: formatCompactPrice(point.low),
+            close: formatCompactPrice(point.price),
+            mean: formatCompactPrice(point.mean),
+            meanUpper: formatCompactPrice(point.meanUpper),
+            meanLower: formatCompactPrice(point.meanLower),
+            distancePct: Number.isFinite(point.distancePct as number) ? `${(point.distancePct as number).toFixed(2)}%` : "—",
+            rsi14: formatCompactNumber(point.rsi14, 1),
+            signal: rowSignal,
+          };
+        }),
+      };
+    }
+
+    return {
+      columns: ["Date", "open", "high", "low", "close", "sma200", "sma200Upper", "sma200Lower", "pivot", "signal"],
+      rows: latestPoints.map((point) => {
+        return {
+          Date: formatDate(point.date),
+          open: formatCompactPrice(point.open),
+          high: formatCompactPrice(point.high),
+          low: formatCompactPrice(point.low),
+          close: formatCompactPrice(point.price),
+          sma200: formatCompactPrice(point.sma200),
+          sma200Upper: formatCompactPrice(point.sma200Upper),
+          sma200Lower: formatCompactPrice(point.sma200Lower),
+          pivot: formatCompactPrice(point.pivotLine),
+          signal:
+            point.signal === "ACHAT"
+              ? "OPPORTUNITÉ"
+              : point.signal === "VENTE"
+                ? "RISQUE"
+                : "NEUTRE",
+        };
+      }),
+    };
+  }, [asset]);
+
   const opportunityGradientId = `opportunityGradient-${asset?.id || "unknown"}`;
   const riskGradientId = `riskGradient-${asset?.id || "unknown"}`;
   const brokerLinks = asset ? buildBrokerLinks(asset.symbol) : [];
@@ -1097,61 +1470,37 @@ export function AssetDetail() {
 
   const statusMascotte = asset ? getStatusMascotte(asset.status) : mascotteIcon;
 
-  const technicalIndicators = [
-    {
-      label: "Tendance",
-      value: asset?.technicalIndicators.channelDirection || "Indisponible",
-    },
-    {
-      label: "Bande Bollinger",
-      value: asset?.technicalIndicators.bollingerBands || "Indisponible",
-    },
-    {
-      label: "Pivot",
-      value: asset?.technicalIndicators.pivot || "Indisponible",
-      colSpan: true,
-    },
-    {
-      label: "Prix moyen",
-      value: asset?.technicalIndicators.sma200 || "Indisponible",
-    },
-    {
-      label: "Nombre de jours consécutifs en zone d'achat",
-      value: asset?.technicalIndicators.timeInBuyZone || "Indisponible",
-    },
-    {
-      label: "RSI",
-      value: asset?.technicalIndicators.rsi || "Indisponible",
-    },
-    {
-      label: "MACD / Signal",
-      value: asset?.technicalIndicators.macd || "Indisponible",
-    },
-  ];
+  const technicalIndicators = Object.entries(asset?.technicalIndicators || {}).map(
+    ([label, value]) => ({
+      label,
+      value: value || "Indisponible",
+      colSpan: label === "Pivot" || label === "Nombre de jours consécutifs en zone d'achat",
+    }),
+  );
 
   if (isLoading) {
     return (
       <PageTransition>
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-24">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-24 text-white">
           <div className="animate-pulse space-y-6">
             <div className="flex items-center justify-between mb-8">
-              <div className="h-6 w-28 bg-gray-100 rounded-xl" />
-              <div className="w-10 h-10 bg-gray-100 rounded-full" />
+              <div className="h-6 w-28 bg-[#1E2939] rounded-xl" />
+              <div className="w-10 h-10 bg-[#1E2939] rounded-full" />
             </div>
 
             <div className="flex items-start gap-4">
-              <div className="w-20 h-20 bg-gray-100 rounded-3xl" />
+              <div className="w-20 h-20 bg-[#1E2939] rounded-3xl" />
               <div className="space-y-3 flex-1">
-                <div className="h-8 w-32 bg-gray-100 rounded-xl" />
-                <div className="h-4 w-56 bg-gray-100 rounded-xl" />
-                <div className="h-10 w-40 bg-gray-100 rounded-xl" />
+                <div className="h-8 w-32 bg-[#1E2939] rounded-xl" />
+                <div className="h-4 w-56 bg-[#1E2939] rounded-xl" />
+                <div className="h-10 w-40 bg-[#1E2939] rounded-xl" />
               </div>
             </div>
 
-            <div className="h-[300px] bg-white rounded-3xl border border-gray-100" />
-            <div className="h-24 bg-white rounded-3xl border border-gray-100" />
-            <div className="h-56 bg-white rounded-3xl border border-gray-100" />
-            <div className="h-36 bg-white rounded-3xl border border-gray-100" />
+            <div className="h-[300px] bg-[#1E2939] rounded-3xl border border-white/5" />
+            <div className="h-24 bg-[#1E2939] rounded-3xl border border-white/5" />
+            <div className="h-56 bg-[#1E2939] rounded-3xl border border-white/5" />
+            <div className="h-36 bg-[#1E2939] rounded-3xl border border-white/5" />
           </div>
         </div>
       </PageTransition>
@@ -1161,16 +1510,11 @@ export function AssetDetail() {
   if (!asset) {
     return (
       <PageTransition>
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 text-white">
           <div className="text-center">
-            <h2 className="text-xl font-medium text-gray-900">
+            <h2 className="text-xl font-medium text-white">
               {errorMessage || "Actif non trouvé"}
             </h2>
-            {errorMessage?.includes("réservé au plan") && (
-              <p className="text-sm text-gray-500 mt-3">
-                Passez à l’abonnement requis depuis votre profil pour débloquer cet actif.
-              </p>
-            )}
             <Link
               to="/library"
               className="text-blue-600 hover:underline mt-4 inline-block"
@@ -1193,7 +1537,7 @@ export function AssetDetail() {
 
   return (
     <PageTransition>
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-24">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-24 text-white">
         <motion.div
           className="flex items-center justify-between mb-8"
           initial={{ opacity: 0, y: -20 }}
@@ -1205,7 +1549,7 @@ export function AssetDetail() {
               triggerBackTap();
               navigate(-1);
             }}
-            className="flex items-center gap-2 text-gray-600 hover:text-gray-900"
+            className="flex items-center gap-2 text-white/60 hover:text-white"
             whileHover={{ x: -5 }}
             whileTap={{ scale: 0.95 }}
             transition={{
@@ -1220,7 +1564,7 @@ export function AssetDetail() {
 
           <motion.button
             onClick={toggleWatchlist}
-            className="p-2 hover:bg-gray-100 rounded-full transition-all relative overflow-hidden"
+            className="p-2 hover:bg-white/10 rounded-full transition-all relative overflow-hidden"
             whileHover={{ scale: 1.1, rotate: 10 }}
             whileTap={{ scale: 0.9 }}
           >
@@ -1250,7 +1594,7 @@ export function AssetDetail() {
               className="relative z-10"
             >
               <Star
-                className={`w-6 h-6 ${isWatched ? "fill-yellow-400 text-yellow-400" : "text-gray-400"
+                className={`w-6 h-6 ${isWatched ? "fill-yellow-400 text-yellow-400" : "text-white/45"
                   }`}
               />
             </motion.div>
@@ -1278,7 +1622,7 @@ export function AssetDetail() {
           <div>
             <div className="flex items-center justify-between w-full">
               <h1
-                className="text-[32px] font-semibold text-gray-900 tracking-tight"
+                className="text-[32px] font-semibold text-white tracking-tight"
                 style={{
                   fontFamily:
                     '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif',
@@ -1301,17 +1645,17 @@ export function AssetDetail() {
                     alert("Lien copié !");
                   }
                 }}
-                className="p-2 rounded-full hover:bg-gray-100 transition-all"
+                className="p-2 rounded-full hover:bg-white/10 transition-all"
               >
-                <Share className="w-5 h-5 text-gray-400" />
+                <Share className="w-5 h-5 text-white/45" />
               </button>
             </div>
-            <p className="text-gray-600">{asset.name}</p>
-            <p className="text-sm text-gray-500 mt-1">
+            <p className="text-white/70">{asset.name}</p>
+            <p className="text-sm text-white/50 mt-1">
               {asset.exchange || "Marché non renseigné"}
             </p>
             <motion.div
-              className="text-4xl font-semibold text-gray-900 mt-3 tracking-tight"
+              className="text-4xl font-semibold text-white mt-3 tracking-tight"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 0.3, duration: 0.5 }}
@@ -1319,12 +1663,78 @@ export function AssetDetail() {
               {formatCurrency(asset.currentPrice, asset.currency)}
             </motion.div>
             <div
-              className={`mt-2 text-sm font-medium ${asset.change >= 0 ? "text-green-600" : "text-red-600"
+              className={`mt-2 text-sm font-medium ${asset.change >= 0 ? "text-green-400" : "text-red-400"
                 }`}
             >
               {formatChange(asset.change, asset.changePercent, asset.currency)}
             </div>
           </div>
+        </motion.div>
+
+        <motion.div
+          className="px-4 py-3 mb-6"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.18, duration: 0.5 }}
+        >
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+              <div className="text-xs text-white/45 tracking-wide uppercase">
+                Portefeuille groupe
+              </div>
+              <div className={`text-sm mt-1 ${isAssetInSelectedGroup ? "text-green-300" : "text-white/65"}`}>
+                {isGroupAssetsLoading
+                  ? "Vérification du portefeuille groupe..."
+                  : selectedGroup
+                    ? isAssetInSelectedGroup
+                      ? `Portefeuille ${selectedGroup.name}`
+                      : `${asset.symbol} ne fait pas partie du portefeuille ${selectedGroup.name}.`
+                    : "Sélectionnez un groupe pour vérifier son portefeuille."}
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+              <select
+                value={selectedGroupId}
+                onChange={(event) => setSelectedGroupId(event.target.value)}
+                disabled={isGroupsLoading || userGroups.length === 0}
+                className="w-full sm:w-[220px] appearance-none bg-blue-500 rounded-2xl border border-white/5 active:bg-[#1f2937] transition-colors shadow-sm shadow-blue-500/20 py-2 pl-4 pr-3 text-sm font-medium text-white focus:outline-none disabled:opacity-60"
+              >
+                {userGroups.length === 0 ? (
+                  <option value="" className="text-white">
+                    Aucun groupe
+                  </option>
+                ) : (
+                  userGroups.map((group) => (
+                    <option key={group.id} value={group.id} className="text-white">
+                      {group.name}
+                    </option>
+                  ))
+                )}
+              </select>
+
+              <button
+                type="button"
+                onClick={addAssetToSelectedGroup}
+                disabled={!selectedGroupId || isAddingToGroup || isGroupsLoading || isGroupAssetsLoading || isAssetInSelectedGroup}
+                className="rounded-2xl bg-white/10 border border-white/5 px-4 py-2 text-sm font-semibold text-white hover:bg-white/15 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isAddingToGroup ? "Ajout..." : isAssetInSelectedGroup ? "Déjà ajouté" : "Ajouter"}
+              </button>
+            </div>
+          </div>
+
+          {groupAssetMessage && (
+            <div className="mt-3 rounded-2xl bg-green-500/10 border border-green-500/20 px-4 py-3 text-sm text-green-300">
+              {groupAssetMessage}
+            </div>
+          )}
+
+          {groupAssetError && (
+            <div className="mt-3 rounded-2xl bg-red-500/10 border border-red-500/20 px-4 py-3 text-sm text-red-300">
+              {groupAssetError}
+            </div>
+          )}
         </motion.div>
 
         <motion.div
@@ -1346,11 +1756,11 @@ export function AssetDetail() {
                 </linearGradient>
               </defs>
 
-              <CartesianGrid strokeDasharray="3 3" stroke="#e2e2e2a1" />
+              <CartesianGrid strokeDasharray="3 3" stroke="#e2e2e214" />
 
               <XAxis
                 dataKey="date"
-                tick={{ fontSize: 11, fill: "#9ca3af" }}
+                tick={{ fontSize: 11, fill: "#c1c3c6" }}
                 tickFormatter={(value) => {
                   const date = new Date(value);
                   return `${date.getDate()}/${date.getMonth() + 1}`;
@@ -1367,10 +1777,11 @@ export function AssetDetail() {
 
               <Tooltip
                 contentStyle={{
-                  backgroundColor: "rgba(255, 255, 255, 0.95)",
-                  border: "none",
+                  backgroundColor: "rgba(30, 41, 57, 0.96)",
+                  border: "1px solid rgba(255, 255, 255, 0.08)",
                   borderRadius: "12px",
-                  boxShadow: "0 4px 12px rgba(0, 0, 0, 0.1)",
+                  boxShadow: "0 12px 30px rgba(0, 0, 0, 0.25)",
+                  color: "#ffffff",
                 }}
                 formatter={(value: number) => [formatCurrency(value, asset.currency), "Prix"]}
                 labelFormatter={(label) => {
@@ -1403,7 +1814,7 @@ export function AssetDetail() {
                 key="neutral-area"
                 type="monotone"
                 dataKey="neutralPrice"
-                stroke="#6b7280"
+                stroke="#ebebeb"
                 strokeWidth={3}
                 fill="none"
                 connectNulls={false}
@@ -1422,7 +1833,7 @@ export function AssetDetail() {
               <Line
                 type="monotone"
                 dataKey="sma200"
-                stroke="#0055ff61"
+                stroke="#3d6ac4"
                 strokeWidth={2.5}
                 dot={false}
                 connectNulls
@@ -1433,7 +1844,7 @@ export function AssetDetail() {
                 type="monotone"
                 dataKey="sma200Lower"
                 stroke="#0055ff"
-                strokeWidth={1.5}
+                strokeWidth={2.5}
                 dot={false}
                 connectNulls
                 isAnimationActive={false}
@@ -1441,25 +1852,95 @@ export function AssetDetail() {
               <Line
                 type="monotone"
                 dataKey="pivotLine"
-                stroke="#8c8c8c27"
+                stroke="#FEE685"
                 strokeWidth={2}
                 dot={false}
                 connectNulls
                 isAnimationActive={false}
               />
             </ComposedChart>
-          </ResponsiveContainer>
-        </motion.div>
+        </ResponsiveContainer>
+      </motion.div>
+
+      <motion.div
+        className="bg-[#1E2939] rounded-3xl p-5 mb-6 shadow-sm border border-white/5"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.23, duration: 0.5 }}
+      >
+        <div className="flex items-start justify-between gap-4 mb-4">
+          <div>
+            <div className="text-xs text-white/45 tracking-wide uppercase">
+              Observation H4
+            </div>
+            <h2 className="mt-1 font-semibold text-white text-lg tracking-tight">
+              10 dernières analyses
+            </h2>
+          </div>
+          <div className="rounded-full bg-white/5 px-3 py-1 text-xs text-white/55 border border-white/5">
+            {asset.model === "volatility_breakout"
+              ? "Breakout"
+              : asset.model === "mean_reversion"
+                ? "Mean Reversion"
+                : "CBPR"}
+          </div>
+        </div>
+
+        <div className="overflow-x-auto rounded-2xl border border-white/5">
+          <table className="min-w-max w-full border-collapse text-xs sm:text-sm">
+            <thead>
+              <tr>
+                {temporalAnalysisTable.columns.map((column) => (
+                  <th
+                    key={column}
+                    className="whitespace-nowrap border-b border-white/5 px-3 py-3 text-left text-[11px] font-medium uppercase tracking-wide text-white/45"
+                  >
+                    {column}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {temporalAnalysisTable.rows.map((row, index) => {
+                const signal = String(row.signal || "NEUTRE");
+
+                const rowClassName =
+                  signal === "OPPORTUNITÉ"
+                    ? "bg-green-500/10 border-b border-green-500/10 last:border-b-0"
+                    : signal === "RISQUE"
+                      ? "bg-red-500/10 border-b border-red-500/10 last:border-b-0"
+                      : "border-b border-white/5 last:border-b-0";
+
+                return (
+                <tr
+                  key={`${row.Date}-${index}`}
+                  className={rowClassName}
+                >
+                  {temporalAnalysisTable.columns.map((column, columnIndex) => (
+                    <td
+                      key={`${column}-${index}`}
+                      className="whitespace-nowrap px-3 py-3 text-white/75"
+                    >
+                      {String(row[column] || "—")}
+                    </td>
+                  ))}
+                </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </motion.div>
 
 
-        {/* Signal */}
+      {/* Signal */}
         <motion.div
-          className="bg-white rounded-3xl px-5 py-4 mb-6 shadow-sm border border-gray-100"
+          className="bg-[#1E2939] rounded-3xl px-5 py-4 mb-6 mt-10 shadow-sm border border-white/5"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.25, duration: 0.5 }}
         >
-          <div className="text-xs text-gray-400 tracking-wide uppercase">
+          <div className="text-xs text-white/45 tracking-wide uppercase">
             Statut de l'actif
           </div>
 
@@ -1477,7 +1958,7 @@ export function AssetDetail() {
                 <span className="absolute inline-flex h-full w-full rounded-full bg-current opacity-30 animate-ping" />
                 <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-current" />
               </motion.span>
-              <div className="text-sm text-gray-500">{getStatusLabel(asset.status)}</div>
+              <div className="text-sm text-white">{getStatusLabel(asset.status)}</div>
             </div>
             <div className="flex items-center gap-2">
               <img
@@ -1492,12 +1973,12 @@ export function AssetDetail() {
 
         {/* indicateurs techniques */}
         <motion.div
-          className="bg-white rounded-3xl p-5 mb-6 shadow-sm border border-gray-100"
+          className="bg-[#1E2939] rounded-3xl p-5 mb-6 shadow-sm border border-white/5"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3, duration: 0.5 }}
         >
-          <h2 className="font-semibold text-gray-900 mb-5 text-lg tracking-tight">
+          <h2 className="font-semibold text-white mb-5 text-lg tracking-tight">
             Indicateurs techniques
           </h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
@@ -1509,7 +1990,7 @@ export function AssetDetail() {
                   key={indicator.label}
                   type="button"
                   onClick={() => help && setOpenIndicatorHelp(indicator.label)}
-                  className={`relative bg-gray-50 rounded-2xl p-4 text-left ${indicator.colSpan ? "col-span-2 sm:col-span-1" : ""}`}
+                  className={`relative bg-white/5 rounded-2xl p-4 text-left border border-white/5 ${indicator.colSpan ? "col-span-2 sm:col-span-1" : ""}`}
                   initial={{ opacity: 0, scale: 0.9 }}
                   animate={{ opacity: 1, scale: 1 }}
                   transition={{
@@ -1518,10 +1999,10 @@ export function AssetDetail() {
                   }}
                 >
                   <div className="flex items-start justify-between gap-2 mb-1">
-                    <div className="text-xs text-gray-500">{indicator.label}</div>
+                    <div className="text-xs text-white/50">{indicator.label}</div>
                     {help && (
                       <span
-                        className="text-gray-400 flex-shrink-0"
+                        className="text-white/45 flex-shrink-0"
                         aria-label={`Comprendre ${indicator.label}`}
                       >
                         <HelpCircle className="w-4 h-4" />
@@ -1529,7 +2010,7 @@ export function AssetDetail() {
                     )}
                   </div>
 
-                  <div className="font-semibold text-gray-900 tracking-tight">{indicator.value}</div>
+                  <div className="font-semibold text-white tracking-tight">{indicator.value}</div>
                 </motion.button>
               );
             })}
@@ -1548,30 +2029,30 @@ export function AssetDetail() {
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 16, scale: 0.98 }}
                 transition={{ duration: 0.2 }}
-                className="w-full max-w-2xl rounded-3xl border border-gray-200 bg-white p-5 shadow-2xl"
+                className="w-full max-w-2xl rounded-3xl border border-white/10 bg-[#1E2939] p-5 shadow-2xl text-white"
                 onClick={(e) => e.stopPropagation()}
               >
                 <div className="flex items-start justify-between gap-3 mb-3">
-                  <div className="text-lg font-semibold text-gray-900">
+                  <div className="text-lg font-semibold text-white">
                     {TECHNICAL_INDICATOR_HELP[openIndicatorHelp].title}
                   </div>
                   <button
                     type="button"
                     onClick={() => setOpenIndicatorHelp(null)}
-                    className="text-gray-400 hover:text-gray-700 transition-colors flex-shrink-0"
+                    className="text-white/45 hover:text-white transition-colors flex-shrink-0"
                     aria-label="Fermer l'explication"
                   >
                     <X className="w-5 h-5" />
                   </button>
                 </div>
-                <p className="text-sm text-gray-600 leading-relaxed mb-3">
+                <p className="text-sm text-white/65 leading-relaxed mb-3">
                   {TECHNICAL_INDICATOR_HELP[openIndicatorHelp].description}
                 </p>
-                <p className="text-sm text-gray-900 leading-relaxed font-medium mb-4">
+                <p className="text-sm text-white leading-relaxed font-medium mb-4">
                   {TECHNICAL_INDICATOR_HELP[openIndicatorHelp].insight}
                 </p>
                 {TECHNICAL_INDICATOR_HELP[openIndicatorHelp].courbe ? (
-                  <p className="text-sm text-gray-900 leading-relaxed">
+                  <p className="text-sm text-white leading-relaxed">
                     {TECHNICAL_INDICATOR_HELP[openIndicatorHelp].courbe}
                   </p>
                 ) : null}
@@ -1582,18 +2063,18 @@ export function AssetDetail() {
 
         {assetMacroRegion && (
           <motion.div
-            className="bg-white rounded-3xl px-5 py-4 mb-6 shadow-sm border border-gray-100"
+            className="bg-[#1E2939] rounded-3xl px-5 py-4 mb-6 shadow-sm border border-white/5"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.34, duration: 0.5 }}
           >
-            <div className="text-xs text-gray-400 tracking-wide uppercase">
+            <div className="text-xs text-white/45 tracking-wide uppercase">
               Marché régional
             </div>
 
             <div className="flex items-center justify-between gap-4 flex-wrap">
               <div>
-                <div className="text-lg font-semibold text-gray-900 tracking-tight">
+                <div className="text-lg font-semibold text-white tracking-tight">
                   {assetMacroRegion.label}
                 </div>
                 <div className="flex items-center gap-2 mt-1">
@@ -1609,7 +2090,7 @@ export function AssetDetail() {
                     <span className="absolute inline-flex h-full w-full rounded-full bg-current opacity-30 animate-ping" />
                     <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-current" />
                   </motion.span>
-                  <div className="text-xs text-gray-400 tracking-wide">
+                  <div className="text-xs text-white/45 tracking-wide">
                     {getMacroStatusLabel(assetMacroRegion.status)}
                   </div>
                 </div>
@@ -1637,7 +2118,7 @@ export function AssetDetail() {
           <button
             type="button"
             onClick={() => setOpenCbprMethod(true)}
-            className="text-sm text-gray-400 hover:text-gray-600 transition-colors underline underline-offset-4"
+            className="text-sm text-white/45 hover:text-white/70 transition-colors underline underline-offset-4"
           >
             Comprendre la méthode CBPR
           </button>
@@ -1657,7 +2138,7 @@ export function AssetDetail() {
                 key={platform.name}
                 type="button"
                 onClick={() => openBrokerLink(platform.webUrl, platform.appUrl)}
-                className={`relative overflow-hidden rounded-3xl bg-gradient-to-br ${platform.color} px-4 py-3 shadow-sm hover:shadow-md transition-all group min-h-[84px] flex items-center border border-gray-100`}
+                className={`relative overflow-hidden rounded-3xl bg-gradient-to-br ${platform.color} px-4 py-3 shadow-sm hover:shadow-md transition-all group min-h-[84px] flex items-center border border-white/5`}
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{
@@ -1673,7 +2154,7 @@ export function AssetDetail() {
               >
                 <div className="relative flex items-center justify-between w-full gap-3">
                   <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-9 h-9 rounded-2xl overflow-hidden flex-shrink-0 border border-gray-100 bg-white">
+                    <div className="w-9 h-9 rounded-2xl overflow-hidden flex-shrink-0 border border-white/5 bg-white">
                       <img
                         src={platform.logo}
                         alt={platform.name}
@@ -1696,38 +2177,38 @@ export function AssetDetail() {
 
         {/* à propos de l'actif */}
         <motion.div
-          className="bg-white rounded-3xl p-5 mb-6 shadow-sm border border-gray-100"
+          className="bg-[#1E2939] rounded-3xl p-5 mb-6 shadow-sm border border-white/5"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.4, duration: 0.5 }}
         >
-          <h2 className="font-semibold text-gray-900 mb-3 text-lg tracking-tight">
+          <h2 className="font-semibold text-white mb-3 text-lg tracking-tight">
             À propos de l'actif
           </h2>
-          <p className="text-sm text-gray-600 leading-relaxed">{asset.description}</p>
+          <p className="text-sm text-white/65 leading-relaxed">{asset.description}</p>
         </motion.div>
 
         {/* synthèse récente */}
         <motion.div
-          className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100"
+          className="bg-[#1E2939] rounded-3xl p-5 shadow-sm border border-white/5"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.5, duration: 0.5 }}
         >
-          <h2 className="font-semibold text-gray-900 mb-4 text-lg tracking-tight">
+          <h2 className="font-semibold text-white mb-4 text-lg tracking-tight">
             Synthèse récente
           </h2>
           <div className="flex flex-col gap-3">
             <motion.div
-              className="bg-gray-50 px-4 py-4 rounded-2xl"
+              className="bg-white/5 px-4 py-4 rounded-2xl"
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.6, duration: 0.3 }}
             >
-              <div className="text-sm font-semibold text-gray-900 mb-1">
+              <div className="text-sm font-semibold text-white mb-1">
                 {explanation.title}
               </div>
-              <div className="text-sm text-gray-600 leading-relaxed">
+              <div className="text-sm text-white/65 leading-relaxed">
                 {explanation.summary}
               </div>
             </motion.div>
@@ -1735,7 +2216,7 @@ export function AssetDetail() {
             {explanation.reasons.map((reason, index) => (
               <motion.div
                 key={`${reason}-${index}`}
-                className="bg-gray-50 px-4 py-3 rounded-2xl text-sm text-gray-700"
+                className="bg-white/5 px-4 py-3 rounded-2xl text-sm text-white/75 border border-white/5"
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{
@@ -1748,7 +2229,7 @@ export function AssetDetail() {
             ))}
 
             <motion.div
-              className="bg-gray-50 px-4 py-4 rounded-2xl"
+              className="bg-white/5 px-4 py-4 rounded-2xl"
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{
@@ -1756,7 +2237,7 @@ export function AssetDetail() {
                 duration: 0.3,
               }}
             >
-              <div className="text-sm text-gray-700 leading-relaxed">
+              <div className="text-sm text-white/75 leading-relaxed">
                 {explanation.scoreLabel}
               </div>
             </motion.div>
@@ -1766,7 +2247,7 @@ export function AssetDetail() {
               .map((news, index) => (
                 <motion.div
                   key={news.id}
-                  className="bg-gray-50 px-4 py-3 rounded-2xl text-sm text-gray-700"
+                  className="bg-white/5 px-4 py-3 rounded-2xl text-sm text-white/75 border border-white/5"
                   initial={{ opacity: 0, x: -20 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{
@@ -1802,8 +2283,8 @@ export function AssetDetail() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.65, duration: 0.4 }}
         >
-          <p className="text-xs text-gray-400">© CBPR Capital – All rights reserved</p>
-          <p className="text-xs text-gray-400 mt-1">CBPR™ methodology</p>
+          <p className="text-xs text-white/45">© CBPR Capital. – All rights reserved</p>
+          <p className="text-xs text-white/45 mt-1">CBPR™ methodology</p>
         </motion.div>
       </div>
     </PageTransition>

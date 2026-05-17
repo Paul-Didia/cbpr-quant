@@ -39,13 +39,13 @@ export function AssetIcon({
   const getAssetColor = (type: AssetType): string => {
     switch (type) {
       case "stock":
-        return "bg-green-500/10 text-green-600";
+        return "bg-green-500/25 text-green-500";
       case "etf":
-        return "bg-blue-500/10 text-blue-600";
+        return "bg-blue-500/25 text-blue-500";
       case "forex":
-        return "bg-purple-500/10 text-purple-600";
+        return "bg-purple-500/25 text-purple-500";
       case "crypto":
-        return "bg-orange-500/10 text-orange-600";
+        return "bg-orange-500/25 text-orange-500";
     }
   };
 

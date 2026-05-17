@@ -5,6 +5,9 @@ import { Home } from './pages/Home';
 import { Library } from './pages/Library';
 import { AssetDetailWrapper } from './pages/AssetDetailWrapper';
 import { Profile } from './pages/Profile';
+import { Desk } from './pages/Desk';
+import { EnterpriseLogin } from './pages/EnterpriseLogin';
+import { EnterpriseDashboard } from './pages/EnterpriseDashboard';
 import { Layout } from './components/Layout';
 import { ProtectedRoute } from './components/ProtectedRoute';
 
@@ -16,6 +19,14 @@ export const router = createBrowserRouter([
   {
     path: '/auth',
     element: <Auth />,
+  },
+  {
+    path: '/enterprise-login',
+    element: <EnterpriseLogin />,
+  },
+  {
+    path: '/enterprise-dashboard',
+    element: <EnterpriseDashboard />,
   },
   {
     path: '/',
@@ -40,6 +51,10 @@ export const router = createBrowserRouter([
       {
         path: 'profile',
         element: <Profile />,
+      },
+      {
+        path: 'desk',
+        element: <Desk />,
       },
     ],
   },

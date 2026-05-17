@@ -1,85 +1,86 @@
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, User, Mail, Bell, Crown, Zap, MessageCircle, TrendingUp, Check, X, LogOut, MessagesSquare, KeyRound, Trash2, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Mail, Bell, MessageCircle, Check, LogOut, MessagesSquare, KeyRound, Trash2, AlertTriangle, Users, Plus, LogIn } from 'lucide-react';
 import { motion } from 'motion/react';
 import { PageTransition } from '../components/PageTransition';
 import { CbprMethode } from '../components/CbprMethode';
 import { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { apiService } from '../services/api';
 import mascotProfile from '../assets/mascotte_profile.svg';
+
 
 export function Profile() {
   const navigate = useNavigate();
-  const { user, logout, updateSubscription, resetPassword, deleteAccount } = useAuth();
-  const [currentPlan, setCurrentPlan] = useState<'free' | 'pro' | 'quant'>(user?.subscription || 'free');
-  const [pendingPlan, setPendingPlan] = useState<'free' | 'pro' | 'quant' | null>(null);
-  const [isUpdatingPlan, setIsUpdatingPlan] = useState(false);
-  const [subscriptionMessage, setSubscriptionMessage] = useState('');
+  const { user, logout, resetPassword, deleteAccount } = useAuth();
   const [openCbprMethod, setOpenCbprMethod] = useState(false);
   const [accountMessage, setAccountMessage] = useState('');
   const [accountError, setAccountError] = useState('');
   const [isResettingPassword, setIsResettingPassword] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
-  const displayedPlan = pendingPlan ?? currentPlan;
+  const [groupName, setGroupName] = useState('');
+  const [groupPassword, setGroupPassword] = useState('');
+  const [groupJoinId, setGroupJoinId] = useState('');
+  const [groupJoinPassword, setGroupJoinPassword] = useState('');
+  const [groupMessage, setGroupMessage] = useState('');
+  const [groupError, setGroupError] = useState('');
+  const [isGroupActionLoading, setIsGroupActionLoading] = useState(false);
   const profileInitial = (user?.name?.trim()?.[0] || user?.email?.trim()?.[0] || 'U').toUpperCase();
 
-
-  useEffect(() => {
-    if (user?.subscription) {
-      setCurrentPlan(user.subscription);
-      setPendingPlan(null);
-    }
-  }, [user?.subscription]);
-
-  const handlePlanChange = async (plan: 'free' | 'pro' | 'quant') => {
-    if (isUpdatingPlan) return;
-
-    if (plan === 'pro') {
-      setPendingPlan('pro');
-      setSubscriptionMessage('Redirection vers la page de souscription Pro...');
-      window.open(stripeProUrl, '_blank', 'noopener,noreferrer');
-      return;
-    }
-
-    if (plan === 'quant') {
-      setPendingPlan('quant');
-      setSubscriptionMessage('Redirection vers la page de souscription Quant...');
-      window.open(stripeQuantUrl, '_blank', 'noopener,noreferrer');
-      return;
-    }
-
-    if (plan === currentPlan && pendingPlan === null) return;
-
-    setPendingPlan(plan);
-    setCurrentPlan(plan);
-    setSubscriptionMessage('');
-    setIsUpdatingPlan(true);
-
-    try {
-      await updateSubscription(plan);
-      setSubscriptionMessage('Votre formule Free est active.');
-    } catch (error) {
-      console.error('Error updating subscription from profile:', error);
-      setPendingPlan(null);
-      setCurrentPlan(user?.subscription || 'free');
-      setSubscriptionMessage("Impossible de mettre à jour l'abonnement pour le moment.");
-    } finally {
-      if (plan === 'free') {
-        setPendingPlan(null);
-      }
-      setIsUpdatingPlan(false);
-    }
-  };
-
-  const hasWhatsappAccess = displayedPlan === 'pro' || displayedPlan === 'quant';
+  
   const whatsappUrl = 'https://buy.stripe.com/eVqbJ1dBcafK1D06YGasg06';
-  const stripeProUrl = 'https://buy.stripe.com/5kQ5kD8gScnSbdAdn4asg05';
-  const stripeQuantUrl = 'https://buy.stripe.com/6oUfZhgNo87C5Tgdn4asg03';
-  const stripeBillingUrl = 'https://billing.stripe.com/p/login/00w7sL1Su73y5Tgfvcasg00';
 
   const handleLogout = () => {
     logout();
     navigate('/');
+  };
+
+  const handleCreateGroup = async () => {
+    const trimmedGroupName = groupName.trim();
+    const trimmedGroupPassword = groupPassword.trim();
+
+    if (!trimmedGroupName || !trimmedGroupPassword || isGroupActionLoading) return;
+
+    setGroupMessage('');
+    setGroupError('');
+    setIsGroupActionLoading(true);
+
+    try {
+      await apiService.createGroup(trimmedGroupName, trimmedGroupPassword);
+
+      setGroupName('');
+      setGroupPassword('');
+      setGroupMessage('Groupe créé avec succès. Vous êtes propriétaire du groupe.');
+    } catch (error) {
+      console.error('Erreur création groupe:', error);
+      setGroupError('Impossible de créer le groupe pour le moment.');
+    } finally {
+      setIsGroupActionLoading(false);
+    }
+  };
+
+  const handleJoinGroup = async () => {
+    const trimmedGroupId = groupJoinId.trim();
+    const trimmedGroupPassword = groupJoinPassword.trim();
+
+    if (!trimmedGroupId || !trimmedGroupPassword || isGroupActionLoading) return;
+
+    setGroupMessage('');
+    setGroupError('');
+    setIsGroupActionLoading(true);
+
+    try {
+      await apiService.joinGroup(trimmedGroupId, trimmedGroupPassword);
+
+      setGroupJoinId('');
+      setGroupJoinPassword('');
+      setGroupMessage('Groupe rejoint avec succès.');
+    } catch (error) {
+      console.error('Erreur adhésion groupe:', error);
+      setGroupError(error instanceof Error ? error.message : 'Impossible de rejoindre le groupe pour le moment.');
+    } finally {
+      setIsGroupActionLoading(false);
+    }
   };
 
   const handleResetPassword = async () => {
@@ -117,7 +118,7 @@ export function Profile() {
   
   return (
     <PageTransition>
-      <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative">
+      <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative text-white">
         <motion.div 
           className="mb-6"
           initial={{ opacity: 0, y: -20 }}
@@ -126,7 +127,7 @@ export function Profile() {
         >
           <motion.button
             onClick={() => navigate(-1)}
-            className="flex items-center gap-2 text-gray-600 hover:text-gray-900"
+            className="flex items-center gap-2 text-white/60 hover:text-white"
             whileHover={{ x: -5 }}
             whileTap={{ scale: 0.95 }}
             transition={{ type: "spring", stiffness: 400, damping: 17 }}
@@ -162,7 +163,7 @@ export function Profile() {
         
         {/* Profile Info */}
         <motion.div 
-          className="relative z-10 bg-white rounded-3xl p-6 mb-6 shadow-sm border border-gray-100"
+          className="relative z-10 bg-[#1E2939] rounded-3xl p-6 mb-6 shadow-sm border border-white/5"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2, duration: 0.5 }}
@@ -179,26 +180,18 @@ export function Profile() {
             </motion.div>
             <div>
               <div className="mb-2">
-                <span
-                  className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold tracking-wide ${
-                    displayedPlan === 'quant'
-                      ? 'bg-gradient-to-r from-yellow-400 to-orange-500 text-white shadow-sm'
-                      : displayedPlan === 'pro'
-                        ? 'bg-gradient-to-r from-purple-500 to-fuchsia-500 text-white shadow-sm'
-                        : 'bg-gray-100 text-gray-700'
-                  }`}
-                >
-                  Plan {displayedPlan === 'quant' ? 'Quant' : displayedPlan === 'pro' ? 'Pro' : 'Free'}
+                <span className="inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold tracking-wide bg-blue-500/15 text-blue-200 border border-blue-400/20">
+                  Accès CBPR Quant Pro
                 </span>
               </div>
-              <div className="font-semibold text-gray-900 text-lg tracking-tight">{user?.name || 'Utilisateur'}</div>
-              <div className="text-sm text-gray-600">Membre depuis {user?.memberSince || 'mars 2026'}</div>
+              <div className="font-semibold text-white text-lg tracking-tight">{user?.name || 'Utilisateur'}</div>
+              <div className="text-sm text-white/60">Membre depuis {user?.memberSince || 'mars 2026'}</div>
             </div>
           </div>
           
           <div className="space-y-4">
             <motion.div 
-              className="flex items-center gap-3 text-gray-600 bg-gray-50 rounded-2xl p-3"
+              className="flex items-center gap-3 text-white/70 bg-white/5 rounded-2xl p-3 border border-white/5"
               whileHover={{ scale: 1.02 }}
             >
               <Mail className="w-5 h-5" />
@@ -207,243 +200,109 @@ export function Profile() {
           </div>
         </motion.div>
         
-        {/* Subscription Plans */}
-        <motion.div 
-          className="bg-white rounded-3xl p-6 mb-6 shadow-sm border border-gray-100 overflow-hidden"
+        {/* Desk Groups */}
+        <motion.div
+          className="bg-[#1E2939] rounded-3xl p-6 mb-6 shadow-sm border border-white/5 overflow-hidden"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.35, duration: 0.5 }}
+          transition={{ delay: 0.28, duration: 0.5 }}
+          whileHover={{ boxShadow: '0 10px 25px -5px rgb(0 0 0 / 0.1)' }}
         >
-          <div className="mb-6">
-            <h2 className="font-semibold text-gray-900 text-lg tracking-tight mb-2">Abonnement</h2>
-            <p className="text-sm text-gray-600">Accédez à plus d'actifs avec nos formules</p>
-            {subscriptionMessage && (
-              <div className={`mt-3 text-sm font-medium ${subscriptionMessage.startsWith('Impossible') ? 'text-red-600' : 'text-green-600'}`}>
-                {subscriptionMessage}
-              </div>
-            )}
+          <div className="flex items-start gap-3 mb-5">
+            <div className="w-11 h-11 rounded-2xl bg-blue-500/15 flex items-center justify-center border border-blue-500/20">
+              <Users className="w-5 h-5 text-blue-300" />
+            </div>
+            <div>
+              <h2 className="font-semibold text-white text-lg tracking-tight">Desk CBPR</h2>
+              <p className="text-sm text-white/60 leading-relaxed">
+                Créez ou rejoignez un groupe pour travailler sur un Desk partagé.
+              </p>
+            </div>
           </div>
 
-          <div className="space-y-3">
-            {/* Free Plan */}
-            <motion.div
-              className={`relative rounded-2xl p-5 border-2 transition-all ${
-                displayedPlan === 'free'
-                  ? 'border-blue-500 bg-blue-50/50'
-                  : 'border-gray-200 bg-gray-50/50'
-              } ${isUpdatingPlan ? 'opacity-70' : 'cursor-pointer'}`}
-              whileHover={isUpdatingPlan ? undefined : { scale: 1.02 }}
-              whileTap={isUpdatingPlan ? undefined : { scale: 0.98 }}
-              onClick={() => handlePlanChange('free')}
-            >
-              {displayedPlan === 'free' && (
-                <motion.div
-                  className="absolute top-4 right-4"
-                  initial={{ scale: 0 }}
-                  animate={{ scale: 1 }}
-                  transition={{ type: "spring", stiffness: 500, damping: 20 }}
-                >
-                  <div className="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center">
-                    <Check className="w-4 h-4 text-white" strokeWidth={3} />
-                  </div>
-                </motion.div>
-              )}
-              
-              <div className="flex items-start gap-3 mb-3">
-                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-gray-400 to-gray-500 flex items-center justify-center">
-                  <Zap className="w-5 h-5 text-white" />
-                </div>
-                <div className="flex-1">
-                  <h3 className="font-semibold text-gray-900">Free</h3>
-                  <p className="text-2xl font-bold text-gray-900">0€<span className="text-sm font-normal text-gray-600">/mois</span></p>
-                </div>
-              </div>
-              
-              <div className="space-y-2 ml-13">
-                <div className="flex items-center gap-2 text-sm">
-                  <Check className="w-4 h-4 text-green-600" strokeWidth={2.5} />
-                  <span className="text-gray-700">150 actions disponibles</span>
-                </div>
-                <div className="flex items-center gap-2 text-sm">
-                  <Check className="w-4 h-4 text-green-600" strokeWidth={2.5} />
-                  <span className="text-gray-700">5 ETF disponibles</span>
-                </div>
-                <div className="flex items-center gap-2 text-sm">
-                  <X className="w-4 h-4 text-red-500" strokeWidth={2.5} />
-                  <span className="text-gray-500">Pas de Forex</span>
-                </div>
-                <div className="flex items-center gap-2 text-sm">
-                  <Check className="w-4 h-4 text-green-600" strokeWidth={2.5} />
-                  <span className="text-gray-700">5 Crypto disponibles</span>
-                </div>
-              </div>
-            </motion.div>
 
-            {/* Pro Plan */}
-            <motion.div
-              className={`relative rounded-2xl p-5 border-2 transition-all ${
-                displayedPlan === 'pro'
-                  ? 'border-purple-500 bg-purple-50/50'
-                  : 'border-gray-200 bg-gray-50/50'
-              } ${isUpdatingPlan ? 'opacity-70' : 'cursor-pointer'}`}
-              whileHover={isUpdatingPlan ? undefined : { scale: 1.02 }}
-              whileTap={isUpdatingPlan ? undefined : { scale: 0.98 }}
-              onClick={() => handlePlanChange('pro')}
-            >
-              {displayedPlan === 'pro' && (
-                <motion.div
-                  className="absolute top-4 right-4"
-                  initial={{ scale: 0 }}
-                  animate={{ scale: 1 }}
-                  transition={{ type: "spring", stiffness: 500, damping: 20 }}
-                >
-                  <div className="w-6 h-6 rounded-full bg-purple-500 flex items-center justify-center">
-                    <Check className="w-4 h-4 text-white" strokeWidth={3} />
-                  </div>
-                </motion.div>
-              )}
-              
-              <div className="flex items-start gap-3 mb-3">
-                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-purple-600 flex items-center justify-center">
-                  <Crown className="w-5 h-5 text-white" />
-                </div>
-                <div className="flex-1">
-                  <h3 className="font-semibold text-gray-900">Pro</h3>
-                  <p className="text-2xl font-bold text-gray-900">27,99€<span className="text-sm font-normal text-gray-600">/mois</span></p>
-                </div>
+          {groupMessage && (
+            <div className="mb-4 rounded-2xl bg-green-500/10 text-green-300 text-sm font-medium p-4 border border-green-500/20">
+              {groupMessage}
+            </div>
+          )}
+
+          {groupError && (
+            <div className="mb-4 rounded-2xl bg-red-500/10 text-red-300 text-sm font-medium p-4 border border-red-500/20">
+              {groupError}
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 gap-4">
+            <div className="bg-white/5 rounded-2xl p-4 border border-white/5">
+              <div className="flex items-center gap-2 mb-3">
+                <Plus className="w-4 h-4 text-blue-300" />
+                <h3 className="font-semibold text-white">Créer un groupe</h3>
               </div>
-              
-              <div className="space-y-2 ml-13">
-                <div className="flex items-center gap-2 text-sm">
-                  <Check className="w-4 h-4 text-green-600" strokeWidth={2.5} />
-                  <span className="text-gray-700">Toutes les actions</span>
-                </div>
-                <div className="flex items-center gap-2 text-sm">
-                  <Check className="w-4 h-4 text-green-600" strokeWidth={2.5} />
-                  <span className="text-gray-700">10 ETF disponibles</span>
-                </div>
-                <div className="flex items-center gap-2 text-sm">
-                  <X className="w-4 h-4 text-red-500" strokeWidth={2.5} />
-                  <span className="text-gray-500">Pas de Forex</span>
-                </div>
-                <div className="flex items-center gap-2 text-sm">
-                  <Check className="w-4 h-4 text-green-600" strokeWidth={2.5} />
-                  <span className="text-gray-700">10 Crypto disponibles</span>
-                </div>
-              </div>
-              
-              {displayedPlan !== 'pro' && (
+              <div className="flex flex-col gap-2">
+                <input
+                  type="text"
+                  value={groupName}
+                  onChange={(event) => setGroupName(event.target.value)}
+                  placeholder="Nom du groupe"
+                  className="w-full px-4 py-3 bg-[#111827] border border-white/10 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-500/30 text-sm text-white placeholder:text-white/40"
+                />
+                <input
+                  type="password"
+                  value={groupPassword}
+                  onChange={(event) => setGroupPassword(event.target.value)}
+                  placeholder="Mot de passe du groupe"
+                  className="w-full px-4 py-3 bg-[#111827] border border-white/10 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-500/30 text-sm text-white placeholder:text-white/40"
+                />
                 <motion.button
                   type="button"
-                  className="mt-4 w-full bg-purple-500 text-white py-2.5 rounded-xl font-medium"
-                  whileHover={{ scale: 1.02, boxShadow: '0 10px 20px -5px rgb(168 85 247 / 0.4)' }}
-                  whileTap={{ scale: 0.98 }}
-                  transition={{ type: "spring", stiffness: 400, damping: 17 }}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handlePlanChange('pro');
-                  }}
+                  onClick={handleCreateGroup}
+                  disabled={!groupName.trim() || !groupPassword.trim() || isGroupActionLoading}
+                  className="bg-blue-500 text-white px-5 py-3 rounded-2xl font-semibold shadow-lg shadow-blue-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                  whileHover={!groupName.trim() || !groupPassword.trim() || isGroupActionLoading ? undefined : { scale: 1.02 }}
+                  whileTap={!groupName.trim() || !groupPassword.trim() || isGroupActionLoading ? undefined : { scale: 0.98 }}
                 >
-                  S'abonner à Pro
+                  Créer
                 </motion.button>
-              )}
-            </motion.div>
-
-            {/* Quant Plan */}
-            <motion.div
-              className={`relative rounded-2xl p-5 border-2 transition-all overflow-hidden ${
-                displayedPlan === 'quant'
-                  ? 'border-yellow-500 bg-gradient-to-br from-yellow-50 to-orange-50'
-                  : 'border-gray-200 bg-gray-50/50'
-              } ${isUpdatingPlan ? 'opacity-70' : 'cursor-pointer'}`}
-              whileHover={isUpdatingPlan ? undefined : { scale: 1.02 }}
-              whileTap={isUpdatingPlan ? undefined : { scale: 0.98 }}
-              onClick={() => handlePlanChange('quant')}
-            >
-              {/* Premium badge */}
-              <motion.div
-                className="absolute -top-1 -right-1 bg-gradient-to-r from-yellow-400 to-orange-500 text-white text-[10px] font-bold px-3 py-1 rounded-bl-xl rounded-tr-2xl"
-                initial={{ x: 50, opacity: 0 }}
-                animate={{ x: 0, opacity: 1 }}
-                transition={{ delay: 0.5, type: "spring", stiffness: 200 }}
-              >
-                MEILLEUR CHOIX
-              </motion.div>
-
-              {displayedPlan === 'quant' && (
-                <motion.div
-                  className="absolute top-4 left-4"
-                  initial={{ scale: 0 }}
-                  animate={{ scale: 1 }}
-                  transition={{ type: "spring", stiffness: 500, damping: 20 }}
-                >
-                  <div className="w-6 h-6 rounded-full bg-yellow-500 flex items-center justify-center">
-                    <Check className="w-4 h-4 text-white" strokeWidth={3} />
-                  </div>
-                </motion.div>
-              )}
-              
-              <div className="flex items-start gap-3 mb-3 mt-2">
-                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-yellow-400 to-orange-500 flex items-center justify-center shadow-lg">
-                  <TrendingUp className="w-5 h-5 text-white" />
-                </div>
-                <div className="flex-1">
-                  <h3 className="font-semibold text-gray-900">Quant</h3>
-                  <p className="text-2xl font-bold text-gray-900">67,99€<span className="text-sm font-normal text-gray-600">/mois</span></p>
-                </div>
               </div>
-              
-              <div className="space-y-2 ml-13">
-                <div className="flex items-center gap-2 text-sm">
-                  <Check className="w-4 h-4 text-green-600" strokeWidth={2.5} />
-                  <span className="text-gray-700 font-medium">Toutes les actions</span>
-                </div>
-                <div className="flex items-center gap-2 text-sm">
-                  <Check className="w-4 h-4 text-green-600" strokeWidth={2.5} />
-                  <span className="text-gray-700 font-medium">Tous les ETF</span>
-                </div>
-                <div className="flex items-center gap-2 text-sm">
-                  <Check className="w-4 h-4 text-green-600" strokeWidth={2.5} />
-                  <span className="text-gray-700 font-medium">Tous les Forex</span>
-                </div>
-                <div className="flex items-center gap-2 text-sm">
-                  <Check className="w-4 h-4 text-green-600" strokeWidth={2.5} />
-                  <span className="text-gray-700 font-medium">Toutes les Crypto</span>
-                </div>
+            </div>
+
+            <div className="bg-white/5 rounded-2xl p-4 border border-white/5">
+              <div className="flex items-center gap-2 mb-3">
+                <LogIn className="w-4 h-4 text-blue-300" />
+                <h3 className="font-semibold text-white">Rejoindre un groupe</h3>
               </div>
-              
-              {displayedPlan !== 'quant' && (
+              <div className="flex flex-col gap-2">
+                <input
+                  type="text"
+                  value={groupJoinId}
+                  onChange={(event) => setGroupJoinId(event.target.value)}
+                  placeholder="ID du groupe"
+                  className="w-full px-4 py-3 bg-[#111827] border border-white/10 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-500/30 text-sm text-white placeholder:text-white/40"
+                />
+                <input
+                  type="password"
+                  value={groupJoinPassword}
+                  onChange={(event) => setGroupJoinPassword(event.target.value)}
+                  placeholder="Mot de passe du groupe"
+                  className="w-full px-4 py-3 bg-[#111827] border border-white/10 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-500/30 text-sm text-white placeholder:text-white/40"
+                />
                 <motion.button
                   type="button"
-                  className="mt-4 w-full bg-gradient-to-r from-yellow-400 to-orange-500 text-white py-2.5 rounded-xl font-medium shadow-lg"
-                  whileHover={{ scale: 1.02, boxShadow: '0 10px 20px -5px rgb(251 146 60 / 0.5)' }}
-                  whileTap={{ scale: 0.98 }}
-                  transition={{ type: "spring", stiffness: 400, damping: 17 }}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handlePlanChange('quant');
-                  }}
+                  onClick={handleJoinGroup}
+                  disabled={!groupJoinId.trim() || !groupJoinPassword.trim() || isGroupActionLoading}
+                  className="bg-[#2D4F87] text-white px-5 py-3 rounded-2xl font-semibold shadow-lg shadow-black/10 disabled:opacity-50 disabled:cursor-not-allowed"
+                  whileHover={!groupJoinId.trim() || !groupJoinPassword.trim() || isGroupActionLoading ? undefined : { scale: 1.02 }}
+                  whileTap={!groupJoinId.trim() || !groupJoinPassword.trim() || isGroupActionLoading ? undefined : { scale: 0.98 }}
                 >
-                  S'abonner à Quant
+                  Rejoindre
                 </motion.button>
-              )}
-            </motion.div>
+              </div>
+            </div>
           </div>
         </motion.div>
-
-          <motion.a
-            href={stripeBillingUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="mt-5 w-full bg-gray-900 text-white py-3 rounded-2xl font-medium flex items-center justify-center"
-            whileHover={{ scale: 1.01 }}
-            whileTap={{ scale: 0.99 }}
-            transition={{ type: 'spring', stiffness: 400, damping: 17 }}
-          >
-            Gérer mon abonnement
-          </motion.a>
-          <br />
-          <br />
+        
+        
 
         {/* Cercle CBPR Capital */}
         <motion.div 
@@ -593,7 +452,7 @@ export function Profile() {
         </motion.div>
 
         <motion.div
-          className="bg-white rounded-3xl p-6 mb-6 shadow-sm border border-gray-100"
+          className="bg-[#1E2939] rounded-3xl p-6 mb-6 shadow-sm border border-white/5"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.45, duration: 0.5 }}
@@ -601,10 +460,10 @@ export function Profile() {
         >
           <div className="flex items-start justify-between gap-4">
             <div>
-              <h2 className="font-semibold text-gray-900 text-lg tracking-tight mb-2">
+              <h2 className="font-semibold text-white text-lg tracking-tight mb-2">
                 Comprendre la méthode CBPR
               </h2>
-              <p className="text-sm text-gray-600 leading-relaxed">
+              <p className="text-sm text-white/60 leading-relaxed">
                 Découvrez simplement comment CBPR lit le prix, la tendance, les excès et les zones de réaction du marché.
               </p>
             </div>
@@ -612,7 +471,7 @@ export function Profile() {
 
           <motion.button
             type="button"
-            className="mt-4 w-full bg-gray-900 text-white py-3 rounded-2xl font-medium"
+          className="mt-4 w-full bg-[#2D4F87] text-white py-3 rounded-2xl font-medium shadow-lg shadow-black/10"
             whileHover={{ scale: 1.01 }}
             whileTap={{ scale: 0.99 }}
             transition={{ type: 'spring', stiffness: 400, damping: 17 }}
@@ -623,22 +482,22 @@ export function Profile() {
         </motion.div>
         {/* Settings */}
         <motion.div 
-          className="bg-white rounded-3xl p-6 mb-6 shadow-sm border border-gray-100"
+          className="bg-[#1E2939] rounded-3xl p-6 mb-6 shadow-sm border border-white/5"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3, duration: 0.5 }}
           whileHover={{ boxShadow: '0 10px 25px -5px rgb(0 0 0 / 0.1)' }}
         >
-          <h2 className="font-semibold text-gray-900 mb-5 text-lg tracking-tight">Paramètres</h2>
+          <h2 className="font-semibold text-white mb-5 text-lg tracking-tight">Paramètres</h2>
           
           <div className="space-y-4">
             <motion.div 
-              className="flex items-center justify-between bg-gray-50 rounded-2xl p-4"
+              className="flex items-center justify-between bg-white/5 rounded-2xl p-4 border border-white/5"
               whileHover={{ scale: 1.02 }}
             >
               <div className="flex items-center gap-3">
-                <Bell className="w-5 h-5 text-gray-600" />
-                <span className="text-gray-900 font-medium">Notifications</span>
+                <Bell className="w-5 h-5 text-white/60" />
+                <span className="text-white font-medium">Notifications</span>
               </div>
               <label className="relative inline-flex items-center cursor-pointer">
                 <input type="checkbox" className="sr-only peer" defaultChecked />
@@ -653,13 +512,13 @@ export function Profile() {
               type="button"
               onClick={handleResetPassword}
               disabled={isResettingPassword || !user?.email}
-              className="w-full flex items-center justify-between bg-gray-50 rounded-2xl p-4 text-left disabled:opacity-60 disabled:cursor-not-allowed"
+              className="w-full flex items-center justify-between bg-white/5 rounded-2xl p-4 text-left border border-white/5 disabled:opacity-60 disabled:cursor-not-allowed"
               whileHover={isResettingPassword ? undefined : { scale: 1.02 }}
               whileTap={isResettingPassword ? undefined : { scale: 0.98 }}
             >
               <div className="flex items-center gap-3">
-                <KeyRound className="w-5 h-5 text-gray-600" />
-                <span className="text-gray-900 font-medium">Réinitialiser mon mot de passe</span>
+                <KeyRound className="w-5 h-5 text-white/60" />
+                <span className="text-white font-medium">Réinitialiser mon mot de passe</span>
               </div>
               <span className="text-sm text-blue-500 font-medium">
                 {isResettingPassword ? 'Envoi...' : 'Envoyer'}
@@ -682,7 +541,7 @@ export function Profile() {
 
         {/* Danger Zone */}
         <motion.div 
-          className="bg-white rounded-3xl p-6 mb-6 shadow-sm border border-red-100"
+          className="bg-[#1E2939] rounded-3xl p-6 mb-6 shadow-sm border border-red-500/20"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.32, duration: 0.5 }}
@@ -693,8 +552,8 @@ export function Profile() {
               <AlertTriangle className="w-5 h-5 text-red-500" />
             </div>
             <div>
-              <h2 className="font-semibold text-gray-900 text-lg tracking-tight">Zone sensible</h2>
-              <p className="text-sm text-gray-600 leading-relaxed">
+              <h2 className="font-semibold text-white text-lg tracking-tight">Zone sensible</h2>
+              <p className="text-sm text-white/60 leading-relaxed">
                 La suppression du compte est définitive. Vos favoris et données liées au profil seront supprimés.
               </p>
             </div>
@@ -706,7 +565,7 @@ export function Profile() {
               value={deleteConfirmation}
               onChange={(event) => setDeleteConfirmation(event.target.value)}
               placeholder="Tapez SUPPRIMER pour confirmer"
-              className="w-full px-4 py-3 bg-red-50/60 border border-red-100 rounded-2xl focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-400 transition-all text-sm"
+              className="w-full px-4 py-3 bg-white/5 border border-red-500/20 rounded-2xl focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-400 transition-all text-sm text-white placeholder:text-white/40"
             />
 
             <motion.button
@@ -725,13 +584,13 @@ export function Profile() {
         </motion.div>
         {/* Disclaimer */}
         <motion.div 
-          className="rounded-3xl p-5 bg-gradient-to-br from-yellow-50 to-orange-50 border border-yellow-200/50"
+          className="rounded-3xl p-5 bg-gradient-to-br from-yellow-500/15 to-orange-500/10 border border-yellow-500/20"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.4, duration: 0.5 }}
           whileHover={{ scale: 1.02 }}
         >
-          <p className="text-sm text-gray-700 leading-relaxed">
+          <p className="text-sm text-white/75 leading-relaxed">
             <strong className="font-semibold">Avertissement :</strong> CBPR Quant ne fournit pas de conseils d'investissement.
             Les informations présentées sont à titre informatif uniquement. Effectuez vos propres
             recherches avant tout investissement.

@@ -13,6 +13,38 @@ const supabase = createClient(
   publicAnonKey,
 );
 
+async function isEmailAuthorized(email: string) {
+  const safeEmail = email.trim().toLowerCase();
+
+  if (!safeEmail) return false;
+
+  const { data: organizationMember, error: organizationMemberError } = await supabase
+    .from('organization_members')
+    .select('id')
+    .eq('email', safeEmail)
+    .maybeSingle();
+
+  if (organizationMemberError) {
+    console.error('Organization member access check error:', organizationMemberError);
+  }
+
+  if (organizationMember?.id) {
+    return true;
+  }
+
+  const { data: userProfile, error: userProfileError } = await supabase
+    .from('user_profiles')
+    .select('email')
+    .eq('email', safeEmail)
+    .maybeSingle();
+
+  if (userProfileError) {
+    console.error('User profile access check error:', userProfileError);
+  }
+
+  return Boolean(userProfile?.email);
+}
+
 export function Auth() {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
@@ -59,6 +91,14 @@ export function Auth() {
     triggerSuccessTap();
 
     try {
+      const hasAccess = await isEmailAuthorized(email);
+
+      if (!hasAccess) {
+        setError('Votre email n’est pas autorisé à accéder à CBPR Quant Pro. Contactez votre organisation.');
+        setIsLoading(false);
+        return;
+      }
+
       if (isLogin) {
         await login(email, password);
       } else {
@@ -133,7 +173,7 @@ export function Auth() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-blue-50 via-white to-gray-50 flex items-center justify-center px-4 py-12">
+    <div className="min-h-screen bg-[#0e1117] flex items-center justify-center px-4 py-12">
       <motion.div 
         className="w-full max-w-md"
         initial={{ opacity: 0, y: 20 }}
@@ -161,17 +201,17 @@ export function Auth() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.3 }}
         >
-          <h1 className="text-3xl font-semibold text-gray-900 mb-2" style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif' }}>
+          <h1 className="text-3xl font-semibold text-white mb-2" style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif' }}>
             {isPasswordRecovery ? 'Nouveau mot de passe' : isLogin ? 'Bienvenue' : 'Créer un compte'}
           </h1>
-          <p className="text-gray-600">
+          <p className="text-[#a3aab8]">
             {isPasswordRecovery ? 'Choisissez un nouveau mot de passe sécurisé' : isLogin ? 'Connectez-vous pour accéder à vos actifs' : 'Rejoignez CBPR Quant'}
           </p>
         </motion.div>
 
         {/* Formulaire */}
         <motion.div 
-          className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100"
+          className="bg-[#111827] rounded-3xl p-6 shadow-2xl shadow-black/30 border border-white/10"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.4 }}
@@ -186,17 +226,17 @@ export function Auth() {
                   exit={{ opacity: 0, height: 0 }}
                   transition={{ duration: 0.3 }}
                 >
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-white mb-2">
                     Nom complet
                   </label>
                   <div className="relative">
-                    <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                    <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[#6b7280]" />
                     <input
                       type="text"
                       value={name}
                       onChange={(e) => setName(e.target.value)}
                       placeholder="Votre nom"
-                      className="w-full pl-12 pr-4 py-3.5 bg-gray-50 border border-gray-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                      className="w-full pl-12 pr-4 py-3.5 bg-[#262730] border border-white/10 text-white placeholder:text-[#6b7280] rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
                       required={!isLogin}
                     />
                   </div>
@@ -207,17 +247,17 @@ export function Auth() {
             {/* Email */}
             {!isPasswordRecovery && (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-white mb-2">
                   Email
                 </label>
                 <div className="relative">
-                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[#6b7280]" />
                   <input
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="votre@email.com"
-                    className="w-full pl-12 pr-4 py-3.5 bg-gray-50 border border-gray-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                    className="w-full pl-12 pr-4 py-3.5 bg-[#262730] border border-white/10 text-white placeholder:text-[#6b7280] rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
                     required
                   />
                 </div>
@@ -226,17 +266,17 @@ export function Auth() {
 
             {/* Mot de passe */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-white mb-2">
                 {isPasswordRecovery ? 'Nouveau mot de passe' : 'Mot de passe'}
               </label>
               <div className="relative">
-                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[#6b7280]" />
                 <input
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full pl-12 pr-4 py-3.5 bg-gray-50 border border-gray-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                  className="w-full pl-12 pr-4 py-3.5 bg-[#262730] border border-white/10 text-white placeholder:text-[#6b7280] rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
                   required
                 />
               </div>
@@ -247,7 +287,7 @@ export function Auth() {
                     type="button"
                     onClick={handleResetPassword}
                     disabled={isResettingPassword}
-                    className="text-sm text-blue-500 font-medium hover:underline disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="text-sm text-[#60a5fa] font-medium hover:underline disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {isResettingPassword ? 'Envoi en cours...' : 'Mot de passe oublié ?'}
                   </button>
@@ -257,17 +297,17 @@ export function Auth() {
 
             {isPasswordRecovery && (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-white mb-2">
                   Confirmer le mot de passe
                 </label>
                 <div className="relative">
-                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[#6b7280]" />
                   <input
                     type="password"
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     placeholder="••••••••"
-                    className="w-full pl-12 pr-4 py-3.5 bg-gray-50 border border-gray-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                    className="w-full pl-12 pr-4 py-3.5 bg-[#262730] border border-white/10 text-white placeholder:text-[#6b7280] rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
                     required
                   />
                 </div>
@@ -281,7 +321,7 @@ export function Auth() {
                   initial={{ opacity: 0, y: -10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -10 }}
-                  className="flex items-center gap-2 text-red-600 bg-red-50 rounded-xl p-3"
+                  className="flex items-center gap-2 text-red-300 bg-red-500/10 border border-red-500/20 rounded-xl p-3"
                 >
                   <AlertCircle className="w-4 h-4 flex-shrink-0" />
                   <span className="text-sm">{error}</span>
@@ -296,7 +336,7 @@ export function Auth() {
                   initial={{ opacity: 0, y: -10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -10 }}
-                  className="flex items-center gap-2 text-green-700 bg-green-50 rounded-xl p-3"
+                  className="flex items-center gap-2 text-green-300 bg-green-500/10 border border-green-500/20 rounded-xl p-3"
                 >
                   <CheckCircle className="w-4 h-4 flex-shrink-0" />
                   <span className="text-sm">{success}</span>
@@ -308,8 +348,8 @@ export function Auth() {
             <motion.button
               type="submit"
               disabled={isLoading}
-              className="w-full bg-blue-500 text-white py-3.5 rounded-2xl font-semibold shadow-lg shadow-blue-500/25 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-              whileHover={!isLoading ? { scale: 1.02, boxShadow: '0 20px 25px -5px rgb(59 130 246 / 0.3)' } : {}}
+              className="w-full bg-[#262730] border border-white/15 text-white py-3.5 rounded-2xl font-semibold shadow-lg shadow-black/30 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              whileHover={!isLoading ? { scale: 1.02, boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.45)' } : {}}
               whileTap={!isLoading ? { scale: 0.98 } : {}}
               transition={{ type: "spring", stiffness: 400, damping: 17 }}
             >
@@ -343,7 +383,7 @@ export function Auth() {
                   setError('');
                   setSuccess('');
                 }}
-                className="text-blue-500 font-medium text-sm hover:underline"
+                className="text-[#60a5fa] font-medium text-sm hover:underline"
               >
                 {isLogin ? "Pas encore de compte ? S'inscrire" : 'Déjà un compte ? Se connecter'}
               </button>
@@ -353,7 +393,7 @@ export function Auth() {
 
         {/* Disclaimer */}
         <motion.p 
-          className="text-xs text-gray-500 text-center mt-6 px-8 leading-relaxed"
+          className="text-xs text-[#a3aab8] text-center mt-6 px-8 leading-relaxed"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.6, duration: 0.8 }}
@@ -364,7 +404,7 @@ export function Auth() {
 
         {/* Éléments décoratifs */}
         <motion.div
-          className="absolute top-20 left-10 opacity-5 pointer-events-none"
+          className="absolute top-20 left-10 opacity-10 pointer-events-none"
           animate={{
             y: [0, -20, 0],
             rotate: [0, 5, 0],

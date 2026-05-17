@@ -4,6 +4,79 @@ const SUPABASE_API_BASE = `https://${projectId}.supabase.co/functions/v1/make-se
 const PYTHON_API_BASE = (import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000').replace(/\/$/, '');
 const IS_DEV = import.meta.env.DEV;
 
+export interface DeskMember {
+  id: string;
+  label: string;
+  role: 'owner' | 'member';
+}
+
+export interface DeskGroup {
+  id: string;
+  name: string;
+  role: 'owner' | 'member';
+  members: DeskMember[];
+}
+
+export interface GroupAsset {
+  id: string;
+  group_id: string;
+  symbol: string;
+  name?: string | null;
+  asset_type?: string | null;
+  logo?: string | null;
+  added_by?: string | null;
+  added_at?: string;
+}
+
+export interface GroupAssetPayload {
+  symbol: string;
+  name?: string;
+  assetType?: string;
+  logo?: string;
+}
+
+export interface GroupMessage {
+  id: string;
+  group_id: string;
+  room_id: string;
+  message: string;
+  user_id: string;
+  user_email?: string | null;
+  created_at: string;
+}
+
+export interface GroupMessagePayload {
+  roomId: string;
+  message: string;
+}
+
+export interface OrganizationMember {
+  id: string;
+  organization_id: string;
+  user_id?: string | null;
+  email: string;
+  role: 'owner' | 'admin' | 'member';
+  created_at: string;
+}
+
+export interface Organization {
+  id: string;
+  name: string;
+  subscription_plan: 'trader' | 'fund' | 'organization';
+  max_users: number;
+  subscription_active: boolean;
+  stripe_customer_id?: string | null;
+  stripe_subscription_id?: string | null;
+  created_at: string;
+}
+
+export interface OrganizationDashboard {
+  organization: Organization;
+  members: OrganizationMember[];
+  used_users: number;
+  max_users: number;
+}
+
 export class ApiService {
   private token: string | null = null;
   private userEmail: string | null = null;
@@ -106,6 +179,125 @@ export class ApiService {
     });
   }
 
+  // ===== DESK GROUPS (SUPABASE) =====
+  async getGroups(): Promise<DeskGroup[]> {
+    const data = await this.requestSupabase('/groups');
+    return data.groups || [];
+  }
+
+  async createGroup(name: string, password: string): Promise<DeskGroup> {
+    const data = await this.requestSupabase('/groups', {
+      method: 'POST',
+      body: JSON.stringify({ name, password }),
+    });
+
+    return data.group;
+  }
+
+  async joinGroup(groupId: string, password: string): Promise<DeskGroup> {
+    const data = await this.requestSupabase('/groups/join', {
+      method: 'POST',
+      body: JSON.stringify({ groupId, password }),
+    });
+
+    return data.group;
+  }
+
+  async removeGroupMember(groupId: string, userId: string): Promise<{ success: boolean; deletedGroup?: boolean }> {
+    return this.requestSupabase(
+      `/groups/${encodeURIComponent(groupId)}/members/${encodeURIComponent(userId)}`,
+      {
+        method: 'DELETE',
+      }
+    );
+  }
+
+  // ===== DESK GROUP ASSETS (SUPABASE) =====
+  async getGroupAssets(groupId: string): Promise<GroupAsset[]> {
+    const data = await this.requestSupabase(
+      `/groups/${encodeURIComponent(groupId)}/assets`
+    );
+
+    return data.assets || [];
+  }
+
+  async addGroupAsset(groupId: string, asset: GroupAssetPayload): Promise<GroupAsset> {
+    const data = await this.requestSupabase(
+      `/groups/${encodeURIComponent(groupId)}/assets`,
+      {
+        method: 'POST',
+        body: JSON.stringify(asset),
+      }
+    );
+
+    return data.asset;
+  }
+
+  async removeGroupAsset(groupId: string, symbol: string): Promise<{ success: boolean }> {
+    return this.requestSupabase(
+      `/groups/${encodeURIComponent(groupId)}/assets/${encodeURIComponent(symbol)}`,
+      {
+        method: 'DELETE',
+      }
+    );
+  }
+
+  // ===== DESK GROUP MESSAGES (SUPABASE) =====
+  async getGroupMessages(groupId: string, roomId: string = 'general'): Promise<GroupMessage[]> {
+    const data = await this.requestSupabase(
+      `/groups/${encodeURIComponent(groupId)}/messages?roomId=${encodeURIComponent(roomId)}`
+    );
+
+    return data.messages || [];
+  }
+
+  async sendGroupMessage(groupId: string, payload: GroupMessagePayload): Promise<GroupMessage> {
+    const data = await this.requestSupabase(
+      `/groups/${encodeURIComponent(groupId)}/messages`,
+      {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }
+    );
+
+    return data.message;
+  }
+
+  // ===== ORGANIZATIONS / ENTERPRISE ACCESS (SUPABASE) =====
+  async enterpriseLogin(name: string, password: string): Promise<OrganizationDashboard> {
+    return this.requestSupabase('/organizations/login', {
+      method: 'POST',
+      body: JSON.stringify({ name, password }),
+    });
+  }
+
+  async getOrganizationDashboard(organizationId: string): Promise<OrganizationDashboard> {
+    return this.requestSupabase(
+      `/organizations/${encodeURIComponent(organizationId)}`
+    );
+  }
+
+  async addOrganizationMember(organizationId: string, email: string, role: 'admin' | 'member' = 'member'): Promise<OrganizationMember> {
+    const data = await this.requestSupabase(
+      `/organizations/${encodeURIComponent(organizationId)}/members`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ email, role }),
+      }
+    );
+
+    return data.member;
+  }
+
+  async removeOrganizationMember(organizationId: string, memberId: string): Promise<{ success: boolean }> {
+    return this.requestSupabase(
+      `/organizations/${encodeURIComponent(organizationId)}/members/${encodeURIComponent(memberId)}`,
+      {
+        method: 'DELETE',
+      }
+    );
+  }
+
   // ===== SUBSCRIPTION (PYTHON) =====
   async getSubscription(email: string): Promise<'free' | 'pro' | 'quant'> {
     const data = await this.requestPython(
@@ -164,19 +356,24 @@ export class ApiService {
   }
 
   // ===== CBPR ANALYSIS (PYTHON) =====
-  async getAnalysis(symbol: string, interval: string = '4h', outputsize: number = 300) {
+  async getAnalysis(
+    symbol: string,
+    interval: string = '4h',
+    outputsize: number = 300,
+    model: string = 'cbpr'
+  ) {
     return this.requestPython(
-      `/analysis/${encodeURIComponent(symbol)}?interval=${encodeURIComponent(interval)}&outputsize=${outputsize}`
+      `/analysis/${encodeURIComponent(symbol)}?interval=${encodeURIComponent(interval)}&outputsize=${outputsize}&model=${encodeURIComponent(model)}`
     );
   }
 
-  async analyzeFavorites(interval: string = '4h', outputsize: number = 300) {
+  async analyzeFavorites(interval: string = '4h', outputsize: number = 300, model: string = 'cbpr') {
     const favorites = await this.getFavorites();
 
     const results = await Promise.all(
       favorites.map(async (symbol) => {
         try {
-          const analysis = await this.getAnalysis(symbol, interval, outputsize);
+          const analysis = await this.getAnalysis(symbol, interval, outputsize, model);
           return { symbol, ...analysis };
         } catch (error) {
           return {

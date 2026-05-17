@@ -10,6 +10,8 @@ from fastapi import FastAPI, HTTPException, Query, Header, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from cbpr_service import analyze_cbpr
+from volatility_breakout_model import analyze_volatility_breakout
+from mean_reversion_model import analyze_mean_reversion
 from glossary_service import filter_glossary, load_full_glossary
 from market_service import (
     TwelveDataError,
@@ -32,6 +34,7 @@ SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", "") or os.getenv("SUPABASE_KE
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
 SUPABASE_MACRO_TABLE = os.getenv("SUPABASE_MACRO_TABLE", "macro_market_status")
 DEV_DEFAULT_PLAN = os.getenv("DEV_DEFAULT_PLAN", "quant").strip().lower() or "quant"
+ANALYSIS_MODELS = {"cbpr", "volatility_breakout", "mean_reversion"}
 def get_macro_statuses_from_supabase() -> list[dict[str, Any]]:
     if not SUPABASE_URL:
         raise HTTPException(status_code=503, detail="Supabase URL is not configured")
@@ -563,10 +566,18 @@ def analysis(
     symbol: str,
     interval: str = Query(default="4h"),
     outputsize: int = Query(default=300),
+    model: str = Query(default="cbpr"),
     authorization: str | None = Header(default=None),
     x_user_email: str | None = Header(default=None, alias="X-User-Email"),
 ) -> dict[str, Any]:
     try:
+        selected_model = str(model or "cbpr").strip().lower()
+        if selected_model not in ANALYSIS_MODELS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unsupported analysis model: {selected_model}",
+            )
+
         quote_data = get_quote(symbol)
         plan = enforce_symbol_access(symbol, quote_data, authorization, x_user_email)
         ts_data = get_time_series(symbol, interval=interval, outputsize=outputsize)
@@ -574,33 +585,76 @@ def analysis(
         normalized_quote = normalize_quote_item(quote_data)
         asset_type = infer_asset_type(symbol, quote_data)
 
-        analysis_data = analyze_cbpr(
-            ts_data,
-            symbol=symbol,
-            asset_name=quote_data.get("name", symbol),
-            exchange=quote_data.get("exchange", ""),
-        )
+        asset_name = quote_data.get("name", symbol)
+        exchange = quote_data.get("exchange", "")
+
+        if selected_model == "volatility_breakout":
+            analysis_data = analyze_volatility_breakout(
+                ts_data,
+                symbol=symbol,
+                asset_name=asset_name,
+                exchange=exchange,
+            )
+        elif selected_model == "mean_reversion":
+            analysis_data = analyze_mean_reversion(
+                ts_data,
+                symbol=symbol,
+                asset_name=asset_name,
+                exchange=exchange,
+            )
+        else:
+            analysis_data = analyze_cbpr(
+                ts_data,
+                symbol=symbol,
+                asset_name=asset_name,
+                exchange=exchange,
+            )
 
         enriched_values = []
         chart_values = analysis_data.get("chart")
         df = analysis_data.get("dataframe")
 
         if isinstance(chart_values, list) and chart_values:
-            enriched_values = [
-                {
+            enriched_values = []
+            for item in chart_values:
+                base_item = {
                     "datetime": item.get("datetime", ""),
                     "open": item.get("open"),
                     "high": item.get("high"),
                     "low": item.get("low"),
                     "close": item.get("close"),
-                    "SMA200": item.get("sma200"),
-                    "SMA200_upper": item.get("sma200Upper"),
-                    "SMA200_lower": item.get("sma200Lower"),
-                    "pivot_support": item.get("pivotSupport"),
-                    "pivot_resistance": item.get("pivotResistance"),
                 }
-                for item in chart_values
-            ]
+
+                if selected_model == "volatility_breakout":
+                    base_item.update({
+                        "ema20": item.get("ema20"),
+                        "ema50": item.get("ema50"),
+                        "atr14": item.get("atr14"),
+                        "volatilityRatio": item.get("volatilityRatio"),
+                        "rangeHigh": item.get("rangeHigh"),
+                        "rangeLow": item.get("rangeLow"),
+                        "breakoutDirection": item.get("breakoutDirection"),
+                        "trendConfirmation": item.get("trendConfirmation"),
+                        "rsi14": item.get("rsi14"),
+                    })
+                elif selected_model == "mean_reversion":
+                    base_item.update({
+                        "mean": item.get("mean"),
+                        "meanUpper": item.get("meanUpper"),
+                        "meanLower": item.get("meanLower"),
+                        "distancePct": item.get("distancePct"),
+                        "rsi14": item.get("rsi14"),
+                    })
+                else:
+                    base_item.update({
+                        "SMA200": item.get("sma200"),
+                        "SMA200_upper": item.get("sma200Upper"),
+                        "SMA200_lower": item.get("sma200Lower"),
+                        "pivot_support": item.get("pivotSupport"),
+                        "pivot_resistance": item.get("pivotResistance"),
+                    })
+
+                enriched_values.append(base_item)
         elif df is not None:
             enriched_values = [
                 {
@@ -621,6 +675,7 @@ def analysis(
         return {
             "symbol": symbol,
             "interval": interval,
+            "model": selected_model,
             "subscription": plan,
             "logo": "",
             "assetType": asset_type,

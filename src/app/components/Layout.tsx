@@ -1,5 +1,5 @@
 import { Link, Outlet, useLocation } from 'react-router';
-import { Home, Library, User } from 'lucide-react';
+import { Home, Library, LayoutDashboard, User } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useWebHaptics } from 'web-haptics/react';
 
@@ -17,7 +17,7 @@ export function Layout() {
   };
   
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col pb-24 overflow-x-hidden">
+    <div className="min-h-screen bg-[#28374D] text-white flex flex-col pb-24 overflow-x-hidden">
       {/* Main Content */}
       <main className="flex-1 pt-4 pb-6">
         <Outlet />
@@ -25,14 +25,14 @@ export function Layout() {
       
       {/* Bottom Navigation */}
       <motion.nav 
-        className="fixed bottom-0 left-0 right-0 z-[100000] isolate pointer-events-auto touch-manipulation select-none bg-white/95 backdrop-blur-xl border-t border-gray-200/50 pb-safe"
+        className="fixed bottom-0 left-0 right-0 z-[100000] isolate pointer-events-auto touch-manipulation select-none bg-[#1f2937]/95 backdrop-blur-xl border-t border-white/10 pb-safe shadow-2xl shadow-black/40"
         style={{ WebkitTapHighlightColor: 'transparent' }}
         initial={{ y: 100 }}
         animate={{ y: 0 }}
         transition={{ duration: 0.6, ease: [0.25, 0.46, 0.45, 0.94] }}
       >
         <div className="max-w-7xl mx-auto px-4 pb-3 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-3 items-stretch h-20">
+          <div className="grid grid-cols-4 items-stretch h-20">
             <Link
               to="/home"
               onClick={triggerNavHaptic}
@@ -41,8 +41,8 @@ export function Layout() {
               <motion.div
                 className={`w-full h-full flex flex-col items-center justify-center gap-1 rounded-xl transition-all ${
                   isActive('/home')
-                    ? 'text-blue-500'
-                    : 'text-gray-500'
+                    ? 'text-[#60a5fa]'
+                    : 'text-[#a3aab8]'
                 }`}
                 whileHover={{ scale: 1.03 }}
                 whileTap={{ scale: 0.96 }}
@@ -65,8 +65,8 @@ export function Layout() {
               <motion.div
                 className={`w-full h-full flex flex-col items-center justify-center gap-1 rounded-xl transition-all ${
                   isActive('/library')
-                    ? 'text-blue-500'
-                    : 'text-gray-500'
+                    ? 'text-[#60a5fa]'
+                    : 'text-[#a3aab8]'
                 }`}
                 whileHover={{ scale: 1.03 }}
                 whileTap={{ scale: 0.96 }}
@@ -81,6 +81,31 @@ export function Layout() {
               </motion.div>
             </Link>
 
+            
+            <Link
+              to="/desk"
+              onClick={triggerNavHaptic}
+              className="h-full w-full flex items-center justify-center touch-manipulation"
+            >
+              <motion.div
+                className={`w-full h-full flex flex-col items-center justify-center gap-1 rounded-xl transition-all ${
+                  isActive('/desk')
+                    ? 'text-[#60a5fa]'
+                    : 'text-[#a3aab8]'
+                }`}
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.96 }}
+              >
+                <LayoutDashboard className="w-6 h-6" strokeWidth={isActive('/desk') ? 2.5 : 2} />
+                <motion.span
+                  className="text-[11px] font-medium tracking-tight"
+                  animate={{ fontWeight: isActive('/desk') ? 600 : 500 }}
+                >
+                  Desk
+                </motion.span>
+              </motion.div>
+            </Link>
+
             <Link
               to="/profile"
               onClick={triggerNavHaptic}
@@ -89,8 +114,8 @@ export function Layout() {
               <motion.div
                 className={`w-full h-full flex flex-col items-center justify-center gap-1 rounded-xl transition-all ${
                   isActive('/profile')
-                    ? 'text-blue-500'
-                    : 'text-gray-500'
+                    ? 'text-[#60a5fa]'
+                    : 'text-[#a3aab8]'
                 }`}
                 whileHover={{ scale: 1.03 }}
                 whileTap={{ scale: 0.96 }}
