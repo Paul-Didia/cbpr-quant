@@ -115,7 +115,7 @@ ENV = os.getenv("ENV", "dev").strip().lower() or "dev"
 
 frontend_origins_raw = os.getenv(
     "FRONTEND_ORIGIN",
-    "http://localhost:5173,https://quant.cbprcapital.com",
+    "http://localhost:5173,http://localhost:5174,https://quant.cbprcapital.com,https://quantpro.cbprcapital.com",
 )
 frontend_origins = []
 for origin in frontend_origins_raw.split(","):
@@ -126,8 +126,14 @@ for origin in frontend_origins_raw.split(","):
 if "https://quant.cbprcapital.com" not in frontend_origins:
     frontend_origins.append("https://quant.cbprcapital.com")
 
-if ENV != "production" and "http://localhost:5173" not in frontend_origins:
-    frontend_origins.append("http://localhost:5173")
+if "https://quantpro.cbprcapital.com" not in frontend_origins:
+    frontend_origins.append("https://quantpro.cbprcapital.com")
+
+if ENV != "production":
+    if "http://localhost:5173" not in frontend_origins:
+        frontend_origins.append("http://localhost:5173")
+    if "http://localhost:5174" not in frontend_origins:
+        frontend_origins.append("http://localhost:5174")
 
 print(f"[BOOT] ENV={ENV}")
 print(f"[BOOT] Allowed CORS origins={frontend_origins}")
