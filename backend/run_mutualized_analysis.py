@@ -119,11 +119,16 @@ def request_json(
 
 def supabase_headers(*, representation: bool = False) -> dict[str, str]:
     preference = "return=representation" if representation else "return=minimal"
-    return {
+
+    headers = {
         "apikey": SUPABASE_SERVICE_ROLE_KEY,
-        "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
         "Prefer": preference,
     }
+
+    if not SUPABASE_SERVICE_ROLE_KEY.startswith("sb_secret_"):
+        headers["Authorization"] = f"Bearer {SUPABASE_SERVICE_ROLE_KEY}"
+
+    return headers
 
 
 def supabase_url(table: str, parameters: dict[str, str] | None = None) -> str:
