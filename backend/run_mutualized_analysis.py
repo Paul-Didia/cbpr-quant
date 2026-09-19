@@ -8,6 +8,7 @@ dans Supabase. Un événement est créé uniquement lors d'un changement de sign
 Variables requises :
   SUPABASE_URL
   SUPABASE_SERVICE_ROLE_KEY
+  CBPR_INTERNAL_TOKEN
 
 Variables facultatives :
   ANALYSIS_API_BASE_URL          (défaut: ancien service Render CBPR)
@@ -15,7 +16,7 @@ Variables facultatives :
   CBPR_OUTPUTSIZE                (défaut: 300)
   CBPR_MODEL_VERSION             (défaut: cbpr-v1)
   CBPR_STORE_CHART               (défaut: false)
-  CBPR_DELAY_BETWEEN_ASSETS      (défaut: 0.25 seconde)
+  CBPR_DELAY_BETWEEN_ASSETS      (défaut: 3 secondes)
 """
 
 from __future__ import annotations
@@ -72,6 +73,7 @@ SUPABASE_URL = env_required("SUPABASE_URL")
 SUPABASE_SERVICE_ROLE_KEY = "".join(
     env_required("SUPABASE_SERVICE_ROLE_KEY").split()
 )
+CBPR_INTERNAL_TOKEN = "".join(env_required("CBPR_INTERNAL_TOKEN").split())
 ANALYSIS_API_BASE_URL = os.environ.get(
     "ANALYSIS_API_BASE_URL", DEFAULT_ANALYSIS_API_BASE_URL
 ).strip().rstrip("/")
@@ -80,7 +82,7 @@ OUTPUTSIZE = max(200, int(os.environ.get("CBPR_OUTPUTSIZE", "300")))
 MODEL_VERSION = os.environ.get("CBPR_MODEL_VERSION", "cbpr-v1").strip() or "cbpr-v1"
 STORE_CHART = env_bool("CBPR_STORE_CHART", False)
 DELAY_BETWEEN_ASSETS = max(
-    0.0, float(os.environ.get("CBPR_DELAY_BETWEEN_ASSETS", "0.25"))
+    0.0, float(os.environ.get("CBPR_DELAY_BETWEEN_ASSETS", "3"))
 )
 
 
@@ -121,15 +123,14 @@ def request_json(
 
 def supabase_headers(*, representation: bool = False) -> dict[str, str]:
     preference = "return=representation" if representation else "return=minimal"
-
     headers = {
         "apikey": SUPABASE_SERVICE_ROLE_KEY,
         "Prefer": preference,
     }
-
+    # Les nouvelles clés Supabase sb_secret_* s'envoient dans `apikey`.
+    # Les anciennes clés JWT service_role nécessitent aussi Authorization.
     if not SUPABASE_SERVICE_ROLE_KEY.startswith("sb_secret_"):
         headers["Authorization"] = f"Bearer {SUPABASE_SERVICE_ROLE_KEY}"
-
     return headers
 
 
@@ -201,6 +202,7 @@ def fetch_analysis(symbol: str, asset: dict[str, Any]) -> dict[str, Any]:
     headers = {
         "X-CBPR-Asset-Name": str(asset.get("name", "")),
         "X-CBPR-Exchange": str(asset.get("exchange", "")),
+        "X-Internal-Token": CBPR_INTERNAL_TOKEN,
     }
     payload = request_json(
         f"{ANALYSIS_API_BASE_URL}/analysis/{encoded_symbol}?{query}",
@@ -457,4 +459,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
