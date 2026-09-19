@@ -68,7 +68,9 @@ def env_bool(name: str, default: bool = False) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
-SUPABASE_URL = env_required("SUPABASE_URL")
+SUPABASE_SERVICE_ROLE_KEY = "".join(
+    env_required("SUPABASE_SERVICE_ROLE_KEY").split()
+)
 SUPABASE_SERVICE_ROLE_KEY = env_required("SUPABASE_SERVICE_ROLE_KEY")
 ANALYSIS_API_BASE_URL = os.environ.get(
     "ANALYSIS_API_BASE_URL", DEFAULT_ANALYSIS_API_BASE_URL
