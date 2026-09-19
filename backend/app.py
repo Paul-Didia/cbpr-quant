@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import secrets
 import stripe
 import requests
 from typing import Any
@@ -34,7 +35,20 @@ SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", "") or os.getenv("SUPABASE_KE
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
 SUPABASE_MACRO_TABLE = os.getenv("SUPABASE_MACRO_TABLE", "macro_market_status")
 DEV_DEFAULT_PLAN = os.getenv("DEV_DEFAULT_PLAN", "quant").strip().lower() or "quant"
+CBPR_INTERNAL_TOKEN = "".join(os.getenv("CBPR_INTERNAL_TOKEN", "").split())
 ANALYSIS_MODELS = {"cbpr", "volatility_breakout", "mean_reversion"}
+
+
+def has_valid_internal_token(x_internal_token: str | None) -> bool:
+    """Valide les appels serveur-à-serveur sans exposer le secret."""
+    candidate = "".join((x_internal_token or "").split())
+    return bool(
+        CBPR_INTERNAL_TOKEN
+        and candidate
+        and secrets.compare_digest(candidate, CBPR_INTERNAL_TOKEN)
+    )
+
+
 def get_macro_statuses_from_supabase() -> list[dict[str, Any]]:
     if not SUPABASE_URL:
         raise HTTPException(status_code=503, detail="Supabase URL is not configured")
@@ -575,6 +589,7 @@ def analysis(
     model: str = Query(default="cbpr"),
     authorization: str | None = Header(default=None),
     x_user_email: str | None = Header(default=None, alias="X-User-Email"),
+    x_internal_token: str | None = Header(default=None, alias="X-Internal-Token"),
 ) -> dict[str, Any]:
     try:
         selected_model = str(model or "cbpr").strip().lower()
@@ -585,7 +600,18 @@ def analysis(
             )
 
         quote_data = get_quote(symbol)
-        plan = enforce_symbol_access(symbol, quote_data, authorization, x_user_email)
+        if has_valid_internal_token(x_internal_token):
+            # Appel de confiance effectué par le cron/worker mutualisé.
+            # On conserve "quant" pour rester compatible avec le contrat actuel.
+            plan = "quant"
+            print(f"[INTERNAL] Granted mutualized analysis for symbol={symbol}")
+        else:
+            plan = enforce_symbol_access(
+                symbol,
+                quote_data,
+                authorization,
+                x_user_email,
+            )
         ts_data = get_time_series(symbol, interval=interval, outputsize=outputsize)
 
         normalized_quote = normalize_quote_item(quote_data)
