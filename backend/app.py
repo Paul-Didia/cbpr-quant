@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query, Header, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 
+from analysis_queue_worker import start_analysis_queue_worker
 from cbpr_service import analyze_cbpr
 from volatility_breakout_model import analyze_volatility_breakout
 from mean_reversion_model import analyze_mean_reversion
@@ -722,3 +723,41 @@ def analysis(
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Analysis error: {e}")
+
+
+def queue_worker_enabled() -> bool:
+    return os.getenv("CBPR_QUEUE_WORKER_ENABLED", "false").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
+def analyze_queued_asset(
+    symbol: str,
+    timeframe: str,
+    model_version: str,
+) -> dict[str, Any]:
+    selected_model = (
+        "cbpr" if model_version.strip().lower().startswith("cbpr") else model_version
+    )
+    return analysis(
+        symbol=symbol,
+        interval=timeframe,
+        outputsize=max(200, int(os.getenv("CBPR_OUTPUTSIZE", "300"))),
+        model=selected_model,
+        authorization=None,
+        x_user_email=None,
+        x_internal_token=CBPR_INTERNAL_TOKEN,
+    )
+
+
+@app.on_event("startup")
+def start_queue_worker() -> None:
+    if not queue_worker_enabled():
+        print("[QUEUE] Worker disabled")
+        return
+    if not CBPR_INTERNAL_TOKEN:
+        raise RuntimeError("CBPR_INTERNAL_TOKEN is required by the queue worker")
+    start_analysis_queue_worker(analyze_queued_asset)
