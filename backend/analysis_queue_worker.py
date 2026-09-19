@@ -343,7 +343,7 @@ class AnalysisQueueWorker:
                     self._stop.wait(self.poll_seconds)
                     continue
 
-                for index, job in enumerate(jobs):
+                for job in jobs:
                     try:
                         symbol = self._process_job(job)
                         print(f"[QUEUE] Completed {symbol} ({job['asset_id']})")
@@ -354,8 +354,9 @@ class AnalysisQueueWorker:
                         except Exception as queue_error:
                             print(f"[QUEUE] Could not release failed job: {queue_error}")
 
-                    if index < len(jobs) - 1:
-                        self._stop.wait(self.delay_seconds)
+                    # Le délai s'applique aussi entre deux lots successifs.
+                    # C'est indispensable quand CBPR_QUEUE_BATCH_SIZE vaut 1.
+                    self._stop.wait(self.delay_seconds)
             except Exception as error:
                 print(f"[QUEUE] Polling error: {error}")
                 self._stop.wait(self.poll_seconds)
