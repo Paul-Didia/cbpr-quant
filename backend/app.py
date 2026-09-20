@@ -4,6 +4,7 @@ import os
 import secrets
 import stripe
 import requests
+from datetime import datetime, timezone
 from typing import Any
 
 from dotenv import load_dotenv
@@ -333,12 +334,8 @@ def get_required_plan_for_symbol(symbol: str, quote_data: dict[str, Any]) -> str
 
 def is_symbol_allowed_for_plan(symbol: str, quote_data: dict[str, Any], plan: str) -> bool:
     required_plan = get_required_plan_for_symbol(symbol, quote_data)
-
-    if plan == "quant":
-        return True
-    if plan == "pro":
-        return required_plan != "quant"
-    return required_plan == "free"
+    plan_rank = {"free": 0, "pro": 1, "quant": 2}
+    return plan_rank.get(plan, 0) >= plan_rank.get(required_plan, 2)
 
 
 def extract_bearer_token(authorization: str | None) -> str | None:
@@ -353,7 +350,7 @@ def extract_bearer_token(authorization: str | None) -> str | None:
     return token or None
 
 
-def get_user_email_from_token(authorization: str | None) -> str | None:
+def get_authenticated_user(authorization: str | None) -> dict[str, str] | None:
     token = extract_bearer_token(authorization)
 
     if not token:
@@ -382,14 +379,79 @@ def get_user_email_from_token(authorization: str | None) -> str | None:
         return None
 
     user_data = response.json()
+    user_id = str(user_data.get("id", "") or "").strip()
     email = str(user_data.get("email", "") or "").strip().lower()
 
-    if email:
-        print(f"[AUTH] Authenticated user: {email}")
-    else:
-        print("[AUTH] Token verified but no email found")
+    if not user_id:
+        print("[AUTH] Token verified but no user id found")
+        return None
 
-    return email or None
+    print(f"[AUTH] Authenticated user: {user_id}")
+    return {"id": user_id, "email": email}
+
+
+def get_user_email_from_token(authorization: str | None) -> str | None:
+    user = get_authenticated_user(authorization)
+    return user.get("email") if user else None
+
+
+def get_ios_entitlement_plan(user_id: str) -> str:
+    """Retourne uniquement un droit App Store vérifié et encore actif."""
+    if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY or not user_id:
+        return "free"
+
+    key = "".join(SUPABASE_SERVICE_ROLE_KEY.split())
+    headers = {
+        "apikey": key,
+        "Content-Type": "application/json",
+    }
+    if not key.startswith("sb_secret_"):
+        headers["Authorization"] = f"Bearer {key}"
+
+    try:
+        response = requests.get(
+            f"{SUPABASE_URL.rstrip('/')}/rest/v1/entitlements_iOS",
+            headers=headers,
+            params={
+                "select": "access_level",
+                "user_id": f"eq.{user_id}",
+                "status": "in.(active,grace_period)",
+                "expires_at": f"gt.{datetime.now(timezone.utc).isoformat()}",
+                "limit": "1",
+            },
+            timeout=10,
+        )
+    except Exception as error:
+        print(f"[ACCESS] Entitlement lookup failed: {error}")
+        return "free"
+
+    if response.status_code >= 400:
+        print(f"[ACCESS] Entitlement lookup HTTP {response.status_code}")
+        return "free"
+
+    rows = response.json()
+    if isinstance(rows, list) and rows:
+        plan = str(rows[0].get("access_level", "free") or "free").lower()
+        if plan in {"pro", "quant"}:
+            return plan
+    return "free"
+
+
+def get_verified_user_plan(user: dict[str, str]) -> str:
+    """App Store d'abord, puis Stripe pour conserver les clients web actuels."""
+    email = user.get("email", "")
+    admin_emails = {
+        value.strip().lower()
+        for value in os.getenv("ADMIN_EMAILS", "").split(",")
+        if value.strip()
+    }
+    if email and email in admin_emails:
+        return "quant"
+
+    ios_plan = get_ios_entitlement_plan(user.get("id", ""))
+    if ios_plan != "free":
+        return ios_plan
+    return get_stripe_plan_by_email(email) if email else "free"
 
 
 def enforce_symbol_access(
@@ -400,15 +462,20 @@ def enforce_symbol_access(
 ) -> str:
     env = ENV
 
-    fallback_email = str(x_user_email or "").strip().lower() or None
-    email = fallback_email or get_user_email_from_token(authorization)
+    user = get_authenticated_user(authorization)
 
-    if email:
-        plan = get_stripe_plan_by_email(email)
-        print(f"[ACCESS] email={email} plan={plan} symbol={symbol}")
+    if user:
+        plan = get_verified_user_plan(user)
+        print(f"[ACCESS] user={user['id']} plan={plan} symbol={symbol}")
     elif env == "dev":
-        plan = DEV_DEFAULT_PLAN
-        print(f"[DEV MODE] Using DEV_DEFAULT_PLAN={plan} for symbol={symbol}")
+        # X-User-Email reste un outil de développement local uniquement.
+        fallback_email = str(x_user_email or "").strip().lower()
+        plan = (
+            get_stripe_plan_by_email(fallback_email)
+            if fallback_email
+            else DEV_DEFAULT_PLAN
+        )
+        print(f"[DEV MODE] Using plan={plan} for symbol={symbol}")
     else:
         plan = "free"
         print(f"[ACCESS] No authenticated email found, falling back to free for symbol={symbol}")
