@@ -11,6 +11,7 @@ from fastapi import FastAPI, HTTPException, Query, Header, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from analysis_queue_worker import start_analysis_queue_worker
+from push_notification_worker import start_push_notification_worker
 from cbpr_service import analyze_cbpr
 from volatility_breakout_model import analyze_volatility_breakout
 from mean_reversion_model import analyze_mean_reversion
@@ -734,6 +735,15 @@ def queue_worker_enabled() -> bool:
     }
 
 
+def push_worker_enabled() -> bool:
+    return os.getenv("APNS_PUSH_WORKER_ENABLED", "false").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
 def analyze_queued_asset(
     symbol: str,
     timeframe: str,
@@ -761,3 +771,11 @@ def start_queue_worker() -> None:
     if not CBPR_INTERNAL_TOKEN:
         raise RuntimeError("CBPR_INTERNAL_TOKEN is required by the queue worker")
     start_analysis_queue_worker(analyze_queued_asset)
+
+
+@app.on_event("startup")
+def start_push_worker() -> None:
+    if not push_worker_enabled():
+        print("[PUSH] Worker disabled")
+        return
+    start_push_notification_worker()
