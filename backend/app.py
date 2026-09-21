@@ -40,6 +40,7 @@ SUPABASE_MACRO_TABLE = os.getenv("SUPABASE_MACRO_TABLE", "macro_market_status")
 DEV_DEFAULT_PLAN = os.getenv("DEV_DEFAULT_PLAN", "quant").strip().lower() or "quant"
 CBPR_INTERNAL_TOKEN = "".join(os.getenv("CBPR_INTERNAL_TOKEN", "").split())
 ANALYSIS_MODELS = {"cbpr", "volatility_breakout", "mean_reversion"}
+SUPPORTED_ASSET_TYPES = {"stock", "etf", "crypto"}
 
 
 def has_valid_internal_token(x_internal_token: str | None) -> bool:
@@ -291,10 +292,24 @@ def infer_asset_type(symbol: str, quote_data: dict[str, Any]) -> str:
     if exchange == "forex" or "forex" in instrument_type:
         return "forex"
 
+    if "commodit" in exchange or "commodit" in instrument_type:
+        return "commodity"
+
     if "etf" in instrument_type or "etf" in name or "ucits" in name:
         return "etf"
 
     return "stock"
+
+
+def ensure_supported_asset_type(symbol: str, quote_data: dict[str, Any]) -> str:
+    """Bloque côté serveur les catégories désactivées dans le catalogue."""
+    asset_type = infer_asset_type(symbol, quote_data)
+    if asset_type not in SUPPORTED_ASSET_TYPES:
+        raise HTTPException(
+            status_code=403,
+            detail="Cette catégorie d’actif n’est pas disponible actuellement.",
+        )
+    return asset_type
 
 
 def get_required_plan_for_symbol(symbol: str, quote_data: dict[str, Any]) -> str:
@@ -532,6 +547,10 @@ def library(
 ) -> dict[str, Any]:
     try:
         glossary = load_full_glossary()
+        glossary = [
+            item for item in glossary
+            if str(item.get("type", "")).lower() in SUPPORTED_ASSET_TYPES
+        ]
 
         if category and category != "all":
             glossary = [
@@ -554,6 +573,11 @@ def search(
     try:
         data = search_assets(q)
         items = [normalize_search_item(x) for x in data.get("data", [])]
+        items = [
+            item for item in items
+            if infer_asset_type(str(item.get("symbol", "")), item)
+            in SUPPORTED_ASSET_TYPES
+        ]
 
         if category and category != "all":
             filtered: list[dict[str, Any]] = []
@@ -604,7 +628,10 @@ def search(
 def quote(symbol: str) -> dict[str, Any]:
     try:
         data = get_quote(symbol)
+        ensure_supported_asset_type(symbol, data)
         return normalize_quote_item(data)
+    except HTTPException:
+        raise
     except TwelveDataError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -618,8 +645,12 @@ def timeseries(
     outputsize: int = Query(default=300),
 ) -> dict[str, Any]:
     try:
+        quote_data = get_quote(symbol)
+        ensure_supported_asset_type(symbol, quote_data)
         data = get_time_series(symbol, interval=interval, outputsize=outputsize)
         return data
+    except HTTPException:
+        raise
     except TwelveDataError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -634,12 +665,13 @@ def asset(
 ) -> dict[str, Any]:
     try:
         quote_data = get_quote(symbol)
+        asset_type = ensure_supported_asset_type(symbol, quote_data)
         plan = enforce_symbol_access(symbol, quote_data, authorization, x_user_email)
 
         return {
             "quote": normalize_quote_item(quote_data),
             "logo": "",
-            "assetType": infer_asset_type(symbol, quote_data),
+            "assetType": asset_type,
             "subscription": plan,
         }
     except HTTPException:
@@ -669,6 +701,7 @@ def analysis(
             )
 
         quote_data = get_quote(symbol)
+        asset_type = ensure_supported_asset_type(symbol, quote_data)
         if has_valid_internal_token(x_internal_token):
             # Appel de confiance effectué par le cron/worker mutualisé.
             # On conserve "quant" pour rester compatible avec le contrat actuel.
@@ -684,8 +717,6 @@ def analysis(
         ts_data = get_time_series(symbol, interval=interval, outputsize=outputsize)
 
         normalized_quote = normalize_quote_item(quote_data)
-        asset_type = infer_asset_type(symbol, quote_data)
-
         asset_name = quote_data.get("name", symbol)
         exchange = quote_data.get("exchange", "")
 
