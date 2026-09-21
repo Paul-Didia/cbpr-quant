@@ -11,6 +11,7 @@ import requests
 
 
 AnalysisCallback = Callable[[str, str, str], dict[str, Any]]
+SUPPORTED_ASSET_TYPES = {"stock", "etf", "crypto"}
 
 
 def _env_int(name: str, default: int, minimum: int, maximum: int) -> int:
@@ -93,16 +94,21 @@ class AnalysisQueueWorker:
             "GET",
             "/rest/v1/assets_iOS",
             params={
-                "select": "id,symbol,name,exchange,mic_code,asset_type",
+                "select": "id,symbol,name,exchange,mic_code,asset_type,is_available",
                 "id": f"eq.{asset_id}",
                 "twelve_data_accessible": "eq.true",
                 "cbpr_validated": "eq.true",
+                "is_available": "eq.true",
                 "limit": "1",
             },
         )
         if not isinstance(rows, list) or not rows:
             raise RuntimeError("Actif absent ou indisponible")
-        return rows[0]
+        asset = rows[0]
+        asset_type = str(asset.get("asset_type", "")).strip().lower()
+        if asset_type not in SUPPORTED_ASSET_TYPES:
+            raise RuntimeError("Catégorie d’actif désactivée")
+        return asset
 
     def _queue_filter(self, job: dict[str, Any]) -> dict[str, str]:
         return {
