@@ -126,6 +126,10 @@ class AnalysisQueueWorker:
             params=self._queue_filter(job),
             body={
                 "status": "completed",
+                # Une exécution réussie clôt la série de tentatives. Sans cette
+                # remise à zéro, quatre actualisations réussies suffiraient à
+                # atteindre la limite réservée aux échecs consécutifs.
+                "attempts": 0,
                 "completed_at": _utc_now(),
                 "locked_at": None,
                 "last_error": None,
