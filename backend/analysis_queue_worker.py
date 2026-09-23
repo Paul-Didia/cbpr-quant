@@ -12,6 +12,7 @@ import requests
 
 AnalysisCallback = Callable[[str, str, str], dict[str, Any]]
 SUPPORTED_ASSET_TYPES = {"stock", "etf", "crypto"}
+TERMINAL_AVAILABLE_AT = "9999-12-31T23:59:59+00:00"
 
 
 def _env_int(name: str, default: int, minimum: int, maximum: int) -> int:
@@ -37,6 +38,7 @@ class AnalysisQueueWorker:
         self.poll_seconds = _env_int("CBPR_QUEUE_POLL_SECONDS", 5, 1, 60)
         self.delay_seconds = _env_int("CBPR_DELAY_BETWEEN_ASSETS", 3, 3, 60)
         self.outputsize = _env_int("CBPR_OUTPUTSIZE", 300, 200, 5000)
+        self.max_attempts = _env_int("CBPR_QUEUE_MAX_ATTEMPTS", 4, 1, 10)
         self._stop = threading.Event()
 
         if not self.supabase_url:
@@ -131,19 +133,67 @@ class AnalysisQueueWorker:
             },
         )
 
+    @staticmethod
+    def _is_permanent_error(error: Exception) -> bool:
+        message = str(error).lower()
+        permanent_markers = (
+            "404 client error",
+            "http 404",
+            "not found for url",
+            "symbol not found",
+            "invalid symbol",
+        )
+        return any(marker in message for marker in permanent_markers)
+
+    def _disable_asset(self, asset_id: str) -> None:
+        self._request(
+            "PATCH",
+            "/rest/v1/assets_iOS",
+            params={"id": f"eq.{asset_id}"},
+            body={
+                "is_available": False,
+                "twelve_data_accessible": False,
+                "updated_at": _utc_now(),
+            },
+        )
+
     def _fail_job(self, job: dict[str, Any], error: Exception) -> None:
         attempts = max(1, int(job.get("attempts", 1) or 1))
-        retry_seconds = min(300, 5 * (2 ** min(attempts - 1, 6)))
-        available_at = datetime.now(timezone.utc) + timedelta(seconds=retry_seconds)
+        permanent = self._is_permanent_error(error)
+        exhausted = attempts >= self.max_attempts
+
+        if permanent:
+            try:
+                self._disable_asset(str(job["asset_id"]))
+                print(f"[QUEUE] Disabled unavailable asset {job['asset_id']}")
+            except Exception as disable_error:
+                print(
+                    "[QUEUE] Unable to disable unavailable asset "
+                    f"{job.get('asset_id')}: {disable_error}"
+                )
+
+        if permanent or exhausted:
+            available_at = TERMINAL_AVAILABLE_AT
+            stored_attempts = max(attempts, self.max_attempts)
+            error_prefix = "permanent" if permanent else "attempts_exhausted"
+        else:
+            retry_seconds = min(300, 5 * (2 ** min(attempts - 1, 6)))
+            available_at = (
+                datetime.now(timezone.utc) + timedelta(seconds=retry_seconds)
+            ).isoformat()
+            stored_attempts = attempts
+            error_prefix = "retryable"
+
         self._request(
             "PATCH",
             "/rest/v1/analysis_queue_iOS",
             params=self._queue_filter(job),
             body={
                 "status": "failed",
-                "available_at": available_at.isoformat(),
+                "attempts": stored_attempts,
+                "available_at": available_at,
                 "locked_at": None,
-                "last_error": str(error)[:2000],
+                "last_error": f"[{error_prefix}] {error}"[:2000],
                 "updated_at": _utc_now(),
             },
         )
