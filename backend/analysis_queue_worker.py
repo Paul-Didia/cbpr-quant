@@ -10,7 +10,7 @@ from typing import Any, Callable
 import requests
 
 
-AnalysisCallback = Callable[[str, str, str], dict[str, Any]]
+AnalysisCallback = Callable[[str, str, str, str | None], dict[str, Any]]
 SUPPORTED_ASSET_TYPES = {"stock", "etf", "crypto"}
 TERMINAL_AVAILABLE_AT = "9999-12-31T23:59:59+00:00"
 
@@ -359,6 +359,7 @@ class AnalysisQueueWorker:
         symbol = str(asset.get("symbol", "")).strip()
         if not symbol:
             raise RuntimeError("Symbole manquant")
+        mic_code = str(asset.get("mic_code") or "").strip().upper() or None
 
         started = time.monotonic()
         run_id = self._insert_run(str(job["asset_id"]), str(job["timeframe"]))
@@ -367,6 +368,7 @@ class AnalysisQueueWorker:
                 symbol,
                 str(job["timeframe"]),
                 str(job["model_version"]),
+                mic_code,
             )
             source_datetime = self._source_datetime(response)
             self._store_market_data(job, response, source_datetime)
