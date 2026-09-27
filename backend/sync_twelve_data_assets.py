@@ -246,6 +246,14 @@ def etf_asset(
     symbol = clean_text(record.get("symbol"))
     name = clean_text(record.get("name"), symbol)
     mic_code = clean_text(record.get("mic_code"))
+
+    # L'annuaire ETF Twelve Data attribue actuellement le libellé de la part
+    # capitalisante à GGRP. Or GGRP/XLON est la part distribuante en GBx
+    # (IE00BZ56RN96) ; la part capitalisante est GGRG/XLON ou GGRA/XLON.
+    # Empêche une synchronisation ultérieure de réintroduire ce mauvais nom.
+    if symbol.upper() == "GGRP" and mic_code.upper() == "XLON":
+        name = "WisdomTree Global Quality Dividend Growth UCITS ETF USD"
+
     required_plan = exchange_plans.get(mic_code, "")
     if (
         not symbol
