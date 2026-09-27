@@ -625,9 +625,12 @@ def search(
 
 
 @app.get("/quote/{symbol:path}")
-def quote(symbol: str) -> dict[str, Any]:
+def quote(
+    symbol: str,
+    mic_code: str | None = Query(default=None),
+) -> dict[str, Any]:
     try:
-        data = get_quote(symbol)
+        data = get_quote(symbol, mic_code=mic_code)
         ensure_supported_asset_type(symbol, data)
         return normalize_quote_item(data)
     except HTTPException:
@@ -643,11 +646,17 @@ def timeseries(
     symbol: str,
     interval: str = Query(default="4h"),
     outputsize: int = Query(default=300),
+    mic_code: str | None = Query(default=None),
 ) -> dict[str, Any]:
     try:
-        quote_data = get_quote(symbol)
+        quote_data = get_quote(symbol, mic_code=mic_code)
         ensure_supported_asset_type(symbol, quote_data)
-        data = get_time_series(symbol, interval=interval, outputsize=outputsize)
+        data = get_time_series(
+            symbol,
+            interval=interval,
+            outputsize=outputsize,
+            mic_code=mic_code,
+        )
         return data
     except HTTPException:
         raise
@@ -660,11 +669,12 @@ def timeseries(
 @app.get("/asset/{symbol:path}")
 def asset(
     symbol: str,
+    mic_code: str | None = Query(default=None),
     authorization: str | None = Header(default=None),
     x_user_email: str | None = Header(default=None, alias="X-User-Email"),
 ) -> dict[str, Any]:
     try:
-        quote_data = get_quote(symbol)
+        quote_data = get_quote(symbol, mic_code=mic_code)
         asset_type = ensure_supported_asset_type(symbol, quote_data)
         plan = enforce_symbol_access(symbol, quote_data, authorization, x_user_email)
 
@@ -688,6 +698,7 @@ def analysis(
     interval: str = Query(default="4h"),
     outputsize: int = Query(default=300),
     model: str = Query(default="cbpr"),
+    mic_code: str | None = Query(default=None),
     authorization: str | None = Header(default=None),
     x_user_email: str | None = Header(default=None, alias="X-User-Email"),
     x_internal_token: str | None = Header(default=None, alias="X-Internal-Token"),
@@ -700,7 +711,7 @@ def analysis(
                 detail=f"Unsupported analysis model: {selected_model}",
             )
 
-        quote_data = get_quote(symbol)
+        quote_data = get_quote(symbol, mic_code=mic_code)
         asset_type = ensure_supported_asset_type(symbol, quote_data)
         if has_valid_internal_token(x_internal_token):
             # Appel de confiance effectué par le cron/worker mutualisé.
@@ -714,7 +725,12 @@ def analysis(
                 authorization,
                 x_user_email,
             )
-        ts_data = get_time_series(symbol, interval=interval, outputsize=outputsize)
+        ts_data = get_time_series(
+            symbol,
+            interval=interval,
+            outputsize=outputsize,
+            mic_code=mic_code,
+        )
 
         normalized_quote = normalize_quote_item(quote_data)
         asset_name = quote_data.get("name", symbol)
@@ -846,6 +862,7 @@ def analyze_queued_asset(
     symbol: str,
     timeframe: str,
     model_version: str,
+    mic_code: str | None,
 ) -> dict[str, Any]:
     selected_model = (
         "cbpr" if model_version.strip().lower().startswith("cbpr") else model_version
@@ -855,6 +872,7 @@ def analyze_queued_asset(
         interval=timeframe,
         outputsize=max(200, int(os.getenv("CBPR_OUTPUTSIZE", "300"))),
         model=selected_model,
+        mic_code=mic_code,
         authorization=None,
         x_user_email=None,
         x_internal_token=CBPR_INTERNAL_TOKEN,
