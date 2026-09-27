@@ -133,17 +133,42 @@ def search_assets(query: str) -> dict[str, Any]:
     return _get_cached("symbol_search", CACHE_TTL_SEARCH, {"symbol": query})
 
 
-def get_quote(symbol: str) -> dict[str, Any]:
-    return _get_cached("quote", CACHE_TTL_QUOTE, {"symbol": symbol})
+def _instrument_params(
+    symbol: str,
+    mic_code: str | None = None,
+) -> dict[str, str]:
+    """Construit une identification Twelve Data non ambiguë.
+
+    Plusieurs ETF européens partagent un ticker entre différentes places.
+    Le MIC provenant du catalogue Twelve Data doit donc accompagner le symbole
+    quand il est disponible.
+    """
+    params = {"symbol": symbol}
+    normalized_mic = str(mic_code or "").strip().upper()
+    if normalized_mic:
+        params["mic_code"] = normalized_mic
+    return params
+
+
+def get_quote(
+    symbol: str,
+    mic_code: str | None = None,
+) -> dict[str, Any]:
+    return _get_cached(
+        "quote",
+        CACHE_TTL_QUOTE,
+        _instrument_params(symbol, mic_code),
+    )
 
 
 def get_time_series(
     symbol: str,
     interval: str = "4h",
     outputsize: int = DEFAULT_OUTPUTSIZE,
+    mic_code: str | None = None,
 ) -> dict[str, Any]:
-    params = {
-        "symbol": symbol,
+    params: dict[str, Any] = {
+        **_instrument_params(symbol, mic_code),
         "interval": interval,
         "outputsize": max(200, int(outputsize)),
     }
