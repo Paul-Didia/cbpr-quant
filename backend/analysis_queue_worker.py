@@ -223,7 +223,7 @@ class AnalysisQueueWorker:
             "GET",
             "/rest/v1/analysis_results_iOS",
             params={
-                "select": "id,signal,source_candle_datetime,analyzed_at",
+                "select": "id,signal,payload,source_candle_datetime,analyzed_at",
                 "asset_id": f"eq.{asset_id}",
                 "timeframe": f"eq.{timeframe}",
                 "model_version": f"eq.{model_version}",
@@ -313,6 +313,9 @@ class AnalysisQueueWorker:
         previous_signal = str(previous.get("signal", "")) if previous else None
         payload = {
             "model": job["model_version"],
+            "state": analysis.get("state"),
+            "observations": analysis.get("observations") or [],
+            "chart": response.get("values") or [],
             "explanation": analysis.get("explanation") or {},
             "indicators": analysis.get("indicators") or {},
             "quote": response.get("quote") or {},
@@ -337,22 +340,9 @@ class AnalysisQueueWorker:
         )
         if not isinstance(rows, list) or not rows:
             raise RuntimeError("Insertion du résultat sans représentation")
-        if previous_signal and previous_signal != signal:
-            self._request(
-                "POST",
-                "/rest/v1/signal_events_iOS",
-                body={
-                    "analysis_result_id": rows[0]["id"],
-                    "asset_id": job["asset_id"],
-                    "timeframe": job["timeframe"],
-                    "model_version": job["model_version"],
-                    "source_candle_datetime": source_datetime,
-                    "previous_signal": previous_signal,
-                    "new_signal": signal,
-                    "score": score,
-                },
-                prefer="resolution=ignore-duplicates,return=minimal",
-            )
+        # Events are inserted transactionally by the SQL result trigger.
+        # Keeping this in the database avoids losing an alert if the worker
+        # crashes after saving the result but before creating the event.
 
     def _process_job(self, job: dict[str, Any]) -> str:
         asset = self._fetch_asset(str(job["asset_id"]))
@@ -370,21 +360,36 @@ class AnalysisQueueWorker:
                 str(job["model_version"]),
                 mic_code,
             )
-            source_datetime = self._source_datetime(response)
-            self._store_market_data(job, response, source_datetime)
-            previous = self._latest_result(
-                str(job["asset_id"]),
-                str(job["timeframe"]),
-                str(job["model_version"]),
-            )
-            if not previous or previous.get("source_candle_datetime") != source_datetime:
-                self._store_result(
-                    job,
-                    run_id,
-                    response,
-                    source_datetime,
-                    previous,
-                )
+            models = response.get("models", {})
+            if not models:
+                raise RuntimeError(f"No successful models: {response.get('errors')}")
+            # CBPR cache remains compatible with the released app. Every model
+            # also stores its own chart/quote inside its immutable result.
+            shared = models.get("cbpr-v1") or next(iter(models.values()))
+            self._store_market_data(job, shared, self._source_datetime(shared))
+            for version, model_response in models.items():
+                model_job = {**job, "model_version": version}
+                source_datetime = self._source_datetime(model_response)
+                previous = self._latest_result(str(job["asset_id"]), str(job["timeframe"]), version)
+                if previous and previous.get("source_candle_datetime") == source_datetime and not (previous.get("payload") or {}).get("observations"):
+                    # Upgrade the last legacy CBPR result without duplicating
+                    # its unique asset/model/candle key or generating an alert.
+                    self._request("PATCH", "/rest/v1/analysis_results_iOS",
+                        params={"id": f"eq.{previous['id']}"},
+                        body={"payload": {
+                            "model": version, "state": model_response["analysis"]["state"],
+                            "observations": model_response["analysis"]["observations"],
+                            "chart": model_response["values"],
+                            "explanation": model_response["analysis"]["explanation"],
+                            "indicators": model_response["analysis"]["indicators"],
+                            "quote": model_response["quote"], "meta": model_response["meta"],
+                        }})
+                elif not previous or previous.get("source_candle_datetime") != source_datetime:
+                    self._store_result(model_job, run_id, model_response, source_datetime, previous)
+            if response.get("errors"):
+                # Successful models survive a partial failure; retries skip
+                # their already saved candle instead of duplicating it.
+                raise RuntimeError(f"Model computation failed: {response['errors']}")
             self._finish_run(run_id, started, "succeeded")
             self._complete_job(job)
             return symbol
