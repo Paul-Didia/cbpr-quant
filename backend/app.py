@@ -13,9 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from analysis_queue_worker import start_analysis_queue_worker
 from push_notification_worker import start_push_notification_worker
-from cbpr_service import analyze_cbpr
-from volatility_breakout_model import analyze_volatility_breakout
-from mean_reversion_model import analyze_mean_reversion
+from model_registry import analyze_model, analyze_snapshot
 from glossary_service import filter_glossary, load_full_glossary
 from market_service import (
     TwelveDataError,
@@ -39,7 +37,7 @@ SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
 SUPABASE_MACRO_TABLE = os.getenv("SUPABASE_MACRO_TABLE", "macro_market_status")
 DEV_DEFAULT_PLAN = os.getenv("DEV_DEFAULT_PLAN", "quant").strip().lower() or "quant"
 CBPR_INTERNAL_TOKEN = "".join(os.getenv("CBPR_INTERNAL_TOKEN", "").split())
-ANALYSIS_MODELS = {"cbpr", "volatility_breakout", "mean_reversion"}
+ANALYSIS_MODELS = {"cbpr", "volatility_breakout", "mean_reversion", "trend_following"}
 SUPPORTED_ASSET_TYPES = {"stock", "etf", "crypto"}
 
 
@@ -736,27 +734,8 @@ def analysis(
         asset_name = quote_data.get("name", symbol)
         exchange = quote_data.get("exchange", "")
 
-        if selected_model == "volatility_breakout":
-            analysis_data = analyze_volatility_breakout(
-                ts_data,
-                symbol=symbol,
-                asset_name=asset_name,
-                exchange=exchange,
-            )
-        elif selected_model == "mean_reversion":
-            analysis_data = analyze_mean_reversion(
-                ts_data,
-                symbol=symbol,
-                asset_name=asset_name,
-                exchange=exchange,
-            )
-        else:
-            analysis_data = analyze_cbpr(
-                ts_data,
-                symbol=symbol,
-                asset_name=asset_name,
-                exchange=exchange,
-            )
+        analysis_data = analyze_model(ts_data, selected_model, symbol=symbol,
+            asset_name=asset_name, exchange=exchange)
 
         enriched_values = []
         chart_values = analysis_data.get("chart")
@@ -773,7 +752,9 @@ def analysis(
                     "close": item.get("close"),
                 }
 
-                if selected_model == "volatility_breakout":
+                if selected_model == "trend_following":
+                    base_item.update({"ema20": item.get("ema20"), "ema50": item.get("ema50")})
+                elif selected_model == "volatility_breakout":
                     base_item.update({
                         "ema20": item.get("ema20"),
                         "ema50": item.get("ema50"),
@@ -864,18 +845,18 @@ def analyze_queued_asset(
     model_version: str,
     mic_code: str | None,
 ) -> dict[str, Any]:
-    selected_model = (
-        "cbpr" if model_version.strip().lower().startswith("cbpr") else model_version
-    )
-    return analysis(
-        symbol=symbol,
-        interval=timeframe,
+    # One provider snapshot for the entire model bundle. Never call /analysis
+    # four times: caching alone is not a guarantee against duplicate requests.
+    quote = get_quote(symbol, mic_code=mic_code)
+    ensure_supported_asset_type(symbol, quote)
+    data = get_time_series(
+        symbol, interval=timeframe,
         outputsize=max(200, int(os.getenv("CBPR_OUTPUTSIZE", "300"))),
-        model=selected_model,
         mic_code=mic_code,
-        authorization=None,
-        x_user_email=None,
-        x_internal_token=CBPR_INTERNAL_TOKEN,
+    )
+    return analyze_snapshot(
+        data, quote, symbol=symbol, timeframe=timeframe,
+        normalized_quote=normalize_quote_item(quote),
     )
 
 
