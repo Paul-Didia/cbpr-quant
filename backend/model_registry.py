@@ -12,10 +12,10 @@ import pandas as pd
 from cbpr_service import analyze_cbpr
 
 MODELS = {
-    "cbpr-v1": ("cbpr", "CBPR"),
-    "mean-reversion-v1": ("mean_reversion", "Retour à la moyenne"),
-    "volatility-breakout-v1": ("volatility_breakout", "Cassure de volatilité"),
-    "trend-following-v1": ("trend_following", "Suivi de tendance"),
+    "cbpr-v1": ("cbpr", "Contexte long"),
+    "mean-reversion-v1": ("mean_reversion", "Contexte court"),
+    "volatility-breakout-v1": ("volatility_breakout", "Volatilité du marché"),
+    "trend-following-v1": ("trend_following", "Tendance du marché"),
 }
 
 
