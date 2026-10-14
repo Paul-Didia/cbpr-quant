@@ -117,79 +117,62 @@ class PushNotificationWorker:
             raise RuntimeError(f"Asset {asset_id} not found")
         return rows[0]
 
-    def _eligible_devices(self, asset_id: str, model_version: str) -> list[dict[str, Any]]:
-        favorites = self._request(
-            "GET",
-            "/rest/v1/favorites_iOS",
-            params={"select": "user_id", "asset_id": f"eq.{asset_id}"},
-        )
-        user_ids = {
-            str(row["user_id"])
-            for row in favorites or []
-            if isinstance(row, dict) and row.get("user_id")
-        }
-        if not user_ids:
-            return []
+    def _all_rows(self, path: str, params: dict[str, str], *, order: str) -> list[dict[str, Any]]:
+        # Continue until an empty page: PostgREST may cap below our page size.
+        rows: list[dict[str, Any]] = []
+        while True:
+            page = self._request("GET", path, params={
+                **params, "order": order, "limit": "100", "offset": str(len(rows)),
+            })
+            if not isinstance(page, list):
+                raise RuntimeError("Invalid paginated Supabase response")
+            if not page:
+                return rows
+            rows.extend(page)
 
-        encoded_users = ",".join(sorted(user_ids))
-        profiles = self._request(
-            "GET",
-            "/rest/v1/profiles_iOS",
-            params={
-                "select": "user_id",
-                "user_id": f"in.({encoded_users})",
+    @staticmethod
+    def _batches(values: list[Any], size: int = 50):
+        for offset in range(0, len(values), size):
+            yield values[offset:offset + size]
+
+    def _eligible_devices(self, asset_id: str, model_version: str) -> list[dict[str, Any]]:
+        favorites = self._all_rows("/rest/v1/favorites_iOS", {
+            "select": "user_id", "asset_id": f"eq.{asset_id}",
+        }, order="user_id.asc")
+        users = sorted({str(row["user_id"]) for row in favorites})
+        enabled_users: set[str] = set()
+        # Bound both URL length and result size, even for very popular assets.
+        for batch in self._batches(users):
+            profiles = self._all_rows("/rest/v1/profiles_iOS", {
+                "select": "user_id", "user_id": f"in.({','.join(batch)})",
                 "signal_notifications_enabled": "eq.true",
                 "favorite_model_version": f"eq.{model_version}",
-            },
-        )
-        enabled_users = {
-            str(row["user_id"])
-            for row in profiles or []
-            if isinstance(row, dict) and row.get("user_id")
-        }
-        if not enabled_users:
-            return []
+            }, order="user_id.asc")
+            enabled_users.update(str(row["user_id"]) for row in profiles)
+        devices: dict[str, dict[str, Any]] = {}
+        for batch in self._batches(sorted(enabled_users)):
+            params = {
+                "select": "id,user_id,device_token,environment",
+                "user_id": f"in.({','.join(batch)})", "notifications_enabled": "eq.true",
+            }
+            if self.environment != "both":
+                params["environment"] = f"eq.{self.environment}"
+            for row in self._all_rows("/rest/v1/push_devices_iOS", params, order="id.asc"):
+                devices[str(row["id"])] = row
+        return list(devices.values())
 
-        params = {
-            "select": "id,user_id,device_token,environment",
-            "user_id": f"in.({','.join(sorted(enabled_users))})",
-            "notifications_enabled": "eq.true",
-        }
-        if self.environment != "both":
-            params["environment"] = f"eq.{self.environment}"
+    def _delivery_rows(self, event_id: str) -> list[dict[str, Any]]:
+        # Include failed/exhausted/invalid and already sent deliveries in totals.
+        return self._all_rows("/rest/v1/push_deliveries_iOS", {
+            "select": "event_id,device_id,status,attempts", "event_id": f"eq.{event_id}",
+        }, order="device_id.asc")
 
-        rows = self._request("GET", "/rest/v1/push_devices_iOS", params=params)
-        return rows if isinstance(rows, list) else []
-
-    def _prepare_deliveries(
-        self,
-        event_id: str,
-        devices: list[dict[str, Any]],
-    ) -> list[dict[str, Any]]:
-        if not devices:
-            return []
-
-        self._request(
-            "POST",
-            "/rest/v1/push_deliveries_iOS",
-            body=[
-                {"event_id": event_id, "device_id": str(device["id"])}
-                for device in devices
-            ],
-            prefer="resolution=ignore-duplicates,return=minimal",
-        )
-
-        rows = self._request(
-            "GET",
-            "/rest/v1/push_deliveries_iOS",
-            params={
-                "select": "event_id,device_id,status,attempts",
-                "event_id": f"eq.{event_id}",
-                "status": "in.(pending,failed)",
-                "attempts": f"lt.{self.max_delivery_attempts}",
-            },
-        )
-        return rows if isinstance(rows, list) else []
+    def _prepare_deliveries(self, event_id: str, devices: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        for batch in self._batches(devices, 100):
+            self._request("POST", "/rest/v1/push_deliveries_iOS",
+                body=[{"event_id": event_id, "device_id": str(device["id"])} for device in batch],
+                prefer="resolution=ignore-duplicates,return=minimal")
+        return self._delivery_rows(event_id)
 
     def _provider_token(self) -> str:
         now = time.time()
@@ -332,6 +315,8 @@ class PushNotificationWorker:
         event_id: str,
         status: str,
         error: str | None = None,
+        *,
+        terminal: bool = False,
     ) -> None:
         self._request(
             "PATCH",
@@ -342,6 +327,8 @@ class PushNotificationWorker:
                 "processed_at": _utc_now(),
                 "locked_at": None,
                 "error_message": error,
+                # Matches the existing claim_signal_events_iOS retry ceiling.
+                **({"delivery_attempts": 8} if terminal else {}),
             },
         )
 
@@ -349,44 +336,49 @@ class PushNotificationWorker:
         event_id = str(event["id"])
         asset = self._asset(str(event["asset_id"]))
         devices = self._eligible_devices(str(event["asset_id"]), str(event.get("model_version") or "cbpr-v1"))
-        if not devices:
-            self._finish_event(event_id, "sent", "No eligible devices")
-            return
-
         device_by_id = {str(device["id"]): device for device in devices}
         deliveries = self._prepare_deliveries(event_id, devices)
-        payload = self._payload(event, asset)
-        sent = 0
-        failed = 0
+        if not deliveries:
+            if devices:
+                raise RuntimeError("No delivery rows persisted for eligible devices")
+            self._finish_event(event_id, "skipped", "No eligible devices", terminal=True)
+            return
 
+        payload = self._payload(event, asset)
         for delivery in deliveries:
             device_id = str(delivery["device_id"])
             device = device_by_id.get(device_id)
-            if not device:
+            attempts = int(delivery.get("attempts", 0) or 0)
+            if (not device or delivery["status"] not in {"pending", "failed"}
+                    or attempts >= self.max_delivery_attempts):
                 continue
-            status, apns_id, error = self._send(device, payload)
-            attempts = int(delivery.get("attempts", 0) or 0) + 1
-            self._update_delivery(
-                event_id,
-                device_id,
-                status,
-                attempts,
-                apns_id,
-                error,
-            )
-            if status == "sent":
-                sent += 1
-            else:
-                failed += 1
-                if status == "invalid_token":
-                    self._disable_invalid_device(device_id)
+            try:
+                status, apns_id, error = self._send(device, payload)
+            except Exception as exc:
+                # One failing connection must not starve other recipients.
+                status, apns_id, error = "failed", None, f"APNs transport error: {type(exc).__name__}"
+            self._update_delivery(event_id, device_id, status, attempts + 1, apns_id, error)
+            if status == "invalid_token":
+                self._disable_invalid_device(device_id)
 
+        # Re-read the complete persisted outcome, rather than only this attempt.
+        outcomes = self._delivery_rows(event_id)
+        if not outcomes:
+            raise RuntimeError("Delivery history disappeared during processing")
+        sent = sum(row["status"] == "sent" for row in outcomes)
+        failed = len(outcomes) - sent
+        retryable = any(
+            row["status"] in {"pending", "failed"}
+            and int(row.get("attempts", 0) or 0) < self.max_delivery_attempts
+            and str(row["device_id"]) in device_by_id
+            for row in outcomes
+        )
         if failed == 0:
             self._finish_event(event_id, "sent")
-        elif sent > 0:
-            self._finish_event(event_id, "partial", f"{failed} delivery failure(s)")
         else:
-            self._finish_event(event_id, "failed", "All deliveries failed")
+            self._finish_event(event_id, "partial" if sent else "failed",
+                f"{sent} sent; {failed} not sent" + ("; no retryable recipient" if not retryable else ""),
+                terminal=not retryable)
 
     def run_forever(self) -> None:
         print(
