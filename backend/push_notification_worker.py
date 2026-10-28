@@ -39,6 +39,9 @@ class PushNotificationWorker:
         self.poll_seconds = _env_int("APNS_POLL_SECONDS", 5, 1, 60)
         self.batch_size = _env_int("APNS_BATCH_SIZE", 10, 1, 50)
         self.max_delivery_attempts = _env_int("APNS_MAX_ATTEMPTS", 5, 1, 10)
+        self.vision_push_enabled = os.getenv("APNS_VISION_PUSH_ENABLED", "false").strip().lower() in {
+            "1", "true", "yes", "on",
+        }
         self._stop = threading.Event()
         self._jwt: str | None = None
         self._jwt_created_at = 0.0
@@ -59,6 +62,10 @@ class PushNotificationWorker:
 
         self.private_key = Path(self.private_key_path).read_text(encoding="utf-8")
         self.apns = httpx.Client(http2=True, timeout=20.0)
+        self.vision_dispatcher = None
+        if self.vision_push_enabled:
+            from market_vision_push import MarketVisionPushDispatcher
+            self.vision_dispatcher = MarketVisionPushDispatcher(self)
 
     def _headers(self, prefer: str | None = None) -> dict[str, str]:
         headers = {
@@ -238,6 +245,9 @@ class PushNotificationWorker:
         self,
         device: dict[str, Any],
         payload: dict[str, Any],
+        *,
+        collapse_id: str | None = None,
+        expiration: int | None = None,
     ) -> tuple[str, str | None, str | None]:
         environment = str(device["environment"])
         host = (
@@ -253,6 +263,8 @@ class PushNotificationWorker:
                 "apns-topic": self.bundle_id,
                 "apns-push-type": "alert",
                 "apns-priority": "10",
+                **({"apns-collapse-id": collapse_id} if collapse_id else {}),
+                **({"apns-expiration": str(expiration)} if expiration is not None else {}),
             },
         )
         apns_id = response.headers.get("apns-id")
@@ -380,6 +392,19 @@ class PushNotificationWorker:
                 f"{sent} sent; {failed} not sent" + ("; no retryable recipient" if not retryable else ""),
                 terminal=not retryable)
 
+    def _process_vision_notifications(self) -> None:
+        dispatcher = getattr(self, "vision_dispatcher", None)
+        if dispatcher is None:
+            return
+        try:
+            stats = dispatcher.run_once()
+            if any(stats.values()):
+                print("[VISION PUSH] " + " ".join(f"{key}={value}" for key, value in stats.items()))
+        except Exception as error:
+            # This queue must not prevent existing signal notifications from running.
+            # Suppress response bodies which may contain sensitive delivery details.
+            print(f"[VISION PUSH] Poll failed ({type(error).__name__})")
+
     def run_forever(self) -> None:
         print(
             "[PUSH] Worker started "
@@ -387,6 +412,7 @@ class PushNotificationWorker:
             f"poll={self.poll_seconds}s)"
         )
         while not self._stop.is_set():
+            self._process_vision_notifications()
             try:
                 events = self._claim_events()
                 if not events:
