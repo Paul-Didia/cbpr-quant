@@ -7,6 +7,7 @@ from typing import Any, Optional
 import requests
 from requests.adapters import HTTPAdapter
 from requests.exceptions import ConnectionError as RequestsConnectionError, RequestException
+from twelve_data_budget import TwelveDataError, TwelveDataDeferredError, acquire, pause
 
 
 BASE_URL = "https://api.twelvedata.com"
@@ -16,7 +17,9 @@ DEFAULT_OUTPUTSIZE = 240
 
 CACHE_TTL_SEARCH = 60 * 60 * 24
 CACHE_TTL_QUOTE = 60 * 2
-CACHE_TTL_TIME_SERIES = 60 * 60 * 4
+# The candle duration is independent of retrieval freshness: the latest 4h
+# candle can evolve between hourly refreshes. Keep only a short reuse window.
+CACHE_TTL_TIME_SERIES = 60 * 5
 
 _cache: dict[
     tuple[str, tuple[tuple[str, str], ...]],
@@ -58,10 +61,6 @@ _session.mount("https://", _adapter)
 _session.mount("http://", _adapter)
 
 
-class TwelveDataError(Exception):
-    pass
-
-
 def _api_key() -> str:
     key = os.getenv("TWELVE_DATA_API_KEY", "").strip()
     if not key:
@@ -85,9 +84,16 @@ def _get(
 ) -> dict[str, Any]:
     query = dict(params or {})
     query["apikey"] = _api_key()
+    if endpoint not in {"quote", "time_series", "symbol_search"}:
+        raise TwelveDataError("Endpoint has no configured Twelve Data credit weight")
+    if endpoint != "symbol_search" and "," in str(query.get("symbol", "")):
+        raise TwelveDataError("Batch symbols are not supported by this single-asset endpoint")
     last_error: Optional[Exception] = None
 
     for attempt in range(2):
+        # Shared across API threads, workers and Render instances. A retry
+        # consumes a fresh reservation too; failures are never refunded.
+        acquire(endpoint)
         try:
             response = _session.get(
                 f"{BASE_URL}/{endpoint}",
@@ -96,13 +102,20 @@ def _get(
                 headers={"Connection": "close"},
             )
 
+            if response.status_code == 429:
+                try:
+                    retry_after = max(65, min(3600, int(response.headers.get("Retry-After", "65"))))
+                except (TypeError, ValueError):
+                    retry_after = 65
+                pause(retry_after)
+                raise TwelveDataDeferredError("Twelve Data rate limit: deferred", retry_after)
+
             # Les erreurs 4xx sont généralement définitives. Les répéter
             # consomme des crédits sans aucune chance de succès, sauf pour les
             # codes explicitement temporaires ci-dessous.
             if 400 <= response.status_code < 500 and response.status_code not in {
                 408,
                 425,
-                429,
             }:
                 raise TwelveDataError(
                     f"HTTP {response.status_code}: {_response_error(response)}"
@@ -111,6 +124,9 @@ def _get(
             response.raise_for_status()
             data = response.json()
             if isinstance(data, dict) and data.get("status") == "error":
+                if str(data.get("code")) == "429":
+                    pause(65)
+                    raise TwelveDataDeferredError("Twelve Data rate limit: deferred", 65)
                 raise TwelveDataError(
                     str(data.get("message") or "Unknown Twelve Data error")
                 )
@@ -122,10 +138,10 @@ def _get(
             if attempt == 0:
                 time.sleep(0.25)
                 continue
-            raise TwelveDataError(str(error)) from error
+            raise TwelveDataError("Twelve Data request failed after two attempts") from error
 
     raise TwelveDataError(
-        str(last_error) if last_error else "Unknown Twelve Data request error"
+        "Twelve Data request failed" if last_error else "Unknown Twelve Data request error"
     )
 
 
