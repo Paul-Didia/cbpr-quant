@@ -15,6 +15,7 @@ from analysis_queue_worker import start_analysis_queue_worker
 from push_notification_worker import start_push_notification_worker
 from model_registry import analyze_model, analyze_snapshot
 from glossary_service import filter_glossary, load_full_glossary
+from twelve_data_budget import TwelveDataDeferredError
 from market_service import (
     TwelveDataError,
     get_quote,
@@ -616,6 +617,9 @@ def search(
 
         return {"data": items[:limit]}
 
+    except TwelveDataDeferredError as e:
+        raise HTTPException(status_code=503, detail=str(e),
+                            headers={"Retry-After": str(e.retry_after)})
     except TwelveDataError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -633,6 +637,9 @@ def quote(
         return normalize_quote_item(data)
     except HTTPException:
         raise
+    except TwelveDataDeferredError as e:
+        raise HTTPException(status_code=503, detail=str(e),
+                            headers={"Retry-After": str(e.retry_after)})
     except TwelveDataError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -658,6 +665,9 @@ def timeseries(
         return data
     except HTTPException:
         raise
+    except TwelveDataDeferredError as e:
+        raise HTTPException(status_code=503, detail=str(e),
+                            headers={"Retry-After": str(e.retry_after)})
     except TwelveDataError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -684,6 +694,9 @@ def asset(
         }
     except HTTPException:
         raise
+    except TwelveDataDeferredError as e:
+        raise HTTPException(status_code=503, detail=str(e),
+                            headers={"Retry-After": str(e.retry_after)})
     except TwelveDataError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -815,6 +828,9 @@ def analysis(
         }
     except HTTPException:
         raise
+    except TwelveDataDeferredError as e:
+        raise HTTPException(status_code=503, detail=str(e),
+                            headers={"Retry-After": str(e.retry_after)})
     except TwelveDataError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
