@@ -11,7 +11,7 @@ Variables requises :
 Variables facultatives :
   CBPR_TIMEFRAME          (défaut: 4h)
   CBPR_MODEL_VERSION      (défaut: cbpr-v1)
-  CBPR_CACHE_MAX_AGE      (défaut: 4 hours, syntaxe interval PostgreSQL)
+  CBPR_CACHE_MAX_AGE      (défaut: 1 hour, syntaxe interval PostgreSQL)
 """
 
 from __future__ import annotations
@@ -51,7 +51,7 @@ SUPABASE_SERVICE_ROLE_KEY = "".join(
 )
 TIMEFRAME = os.environ.get("CBPR_TIMEFRAME", "4h").strip() or "4h"
 MODEL_VERSION = os.environ.get("CBPR_MODEL_VERSION", "cbpr-v1").strip() or "cbpr-v1"
-CACHE_MAX_AGE = os.environ.get("CBPR_CACHE_MAX_AGE", "4 hours").strip() or "4 hours"
+CACHE_MAX_AGE = os.environ.get("CBPR_CACHE_MAX_AGE", "1 hour").strip() or "1 hour"
 
 
 def request_json(
