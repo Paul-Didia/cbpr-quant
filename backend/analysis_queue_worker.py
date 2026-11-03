@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 
 import requests
+from twelve_data_budget import TwelveDataDeferredError
 
 
 AnalysisCallback = Callable[[str, str, str, str | None], dict[str, Any]]
@@ -163,6 +164,20 @@ class AnalysisQueueWorker:
 
     def _fail_job(self, job: dict[str, Any], error: Exception) -> None:
         attempts = max(1, int(job.get("attempts", 1) or 1))
+        if isinstance(error, TwelveDataDeferredError):
+            # Waiting for quota/coordination is not a failed analysis attempt.
+            # Keep it eligible for claim without hitting the retry ceiling.
+            self._request(
+                "PATCH", "/rest/v1/analysis_queue_iOS",
+                params=self._queue_filter(job),
+                body={"status": "failed", "attempts": max(0, attempts - 1),
+                      "available_at": (datetime.now(timezone.utc)
+                                       + timedelta(seconds=error.retry_after)).isoformat(),
+                      "locked_at": None, "last_error": f"[budget_deferred] {error}",
+                      "updated_at": _utc_now()},
+            )
+            print(f"[QUEUE] Deferred {job.get('asset_id')} for {error.retry_after}s (budget)", flush=True)
+            return
         permanent = self._is_permanent_error(error)
         exhausted = attempts >= self.max_attempts
 
@@ -223,7 +238,7 @@ class AnalysisQueueWorker:
             "GET",
             "/rest/v1/analysis_results_iOS",
             params={
-                "select": "id,signal,payload,source_candle_datetime,analyzed_at",
+                "select": "id,signal,score,payload,source_candle_datetime,analyzed_at",
                 "asset_id": f"eq.{asset_id}",
                 "timeframe": f"eq.{timeframe}",
                 "model_version": f"eq.{model_version}",
@@ -297,6 +312,20 @@ class AnalysisQueueWorker:
             prefer="resolution=merge-duplicates,return=minimal",
         )
 
+    @staticmethod
+    def _result_payload(model_version: str, response: dict[str, Any]) -> dict[str, Any]:
+        analysis = response["analysis"]
+        return {
+            "model": model_version,
+            "state": analysis.get("state"),
+            "observations": analysis.get("observations") or [],
+            "chart": response.get("values") or [],
+            "explanation": analysis.get("explanation") or {},
+            "indicators": analysis.get("indicators") or {},
+            "quote": response.get("quote") or {},
+            "meta": response.get("meta") or {},
+        }
+
     def _store_result(
         self,
         job: dict[str, Any],
@@ -311,16 +340,7 @@ class AnalysisQueueWorker:
         signal = str(analysis.get("signal", "NEUTRE") or "NEUTRE").upper()
         score = max(0, min(100, int(analysis.get("score", 0) or 0)))
         previous_signal = str(previous.get("signal", "")) if previous else None
-        payload = {
-            "model": job["model_version"],
-            "state": analysis.get("state"),
-            "observations": analysis.get("observations") or [],
-            "chart": response.get("values") or [],
-            "explanation": analysis.get("explanation") or {},
-            "indicators": analysis.get("indicators") or {},
-            "quote": response.get("quote") or {},
-            "meta": response.get("meta") or {},
-        }
+        payload = self._result_payload(job["model_version"], response)
         rows = self._request(
             "POST",
             "/rest/v1/analysis_results_iOS",
@@ -364,28 +384,38 @@ class AnalysisQueueWorker:
             if not models:
                 raise RuntimeError(f"No successful models: {response.get('errors')}")
             # CBPR cache remains compatible with the released app. Every model
-            # also stores its own chart/quote inside its immutable result.
+            # also stores its own coherent chart/indicators snapshot.
             shared = models.get("cbpr-v1") or next(iter(models.values()))
             self._store_market_data(job, shared, self._source_datetime(shared))
             for version, model_response in models.items():
                 model_job = {**job, "model_version": version}
                 source_datetime = self._source_datetime(model_response)
                 previous = self._latest_result(str(job["asset_id"]), str(job["timeframe"]), version)
-                if previous and previous.get("source_candle_datetime") == source_datetime and not (previous.get("payload") or {}).get("observations"):
-                    # Upgrade the last legacy CBPR result without duplicating
-                    # its unique asset/model/candle key or generating an alert.
-                    self._request("PATCH", "/rest/v1/analysis_results_iOS",
-                        params={"id": f"eq.{previous['id']}"},
-                        body={"payload": {
-                            "model": version, "state": model_response["analysis"]["state"],
-                            "observations": model_response["analysis"]["observations"],
-                            "chart": model_response["values"],
-                            "explanation": model_response["analysis"]["explanation"],
-                            "indicators": model_response["analysis"]["indicators"],
-                            "quote": model_response["quote"], "meta": model_response["meta"],
-                        }})
-                elif not previous or previous.get("source_candle_datetime") != source_datetime:
+                if previous and previous.get("source_candle_datetime") == source_datetime:
+                    # A candle timestamp identifies its opening, not immutable
+                    # OHLC values. Refresh the same row without a new insert or
+                    # duplicate candle notification. Identical retries are no-ops.
+                    payload = self._result_payload(version, model_response)
+                    analysis = model_response["analysis"]
+                    signal = str(analysis.get("signal", "NEUTRE") or "NEUTRE").upper()
+                    score = max(0, min(100, int(analysis.get("score", 0) or 0)))
+                    changed = (previous.get("payload") != payload
+                               or previous.get("signal") != signal
+                               or previous.get("score") != score)
+                    if changed:
+                        self._request(
+                            "PATCH", "/rest/v1/analysis_results_iOS",
+                            params={"id": f"eq.{previous['id']}"},
+                            body={"run_id": run_id, "payload": payload,
+                                  "signal": signal, "score": score,
+                                  "analyzed_at": _utc_now()},
+                        )
+                    action = "updated" if changed else "unchanged"
+                else:
                     self._store_result(model_job, run_id, model_response, source_datetime, previous)
+                    action = "inserted"
+                print(f"[QUEUE] Result {symbol} model={version} "
+                      f"candle={source_datetime} action={action}", flush=True)
             if response.get("errors"):
                 # Successful models survive a partial failure; retries skip
                 # their already saved candle instead of duplicating it.
